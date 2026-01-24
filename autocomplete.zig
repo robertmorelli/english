@@ -382,17 +382,134 @@ test "autocomplete works" {
     try testing.expect(count > 0);
 }
 
-test "no invalid words" {
+test "handsome autocomplete has no invalid variants" {
     const trie = EmbeddedTrie.init();
 
-    var result_storage: [10][64]u8 = undefined;
-    var result_slices: [10][]u8 = undefined;
-    for (0..10) |i| {
+    var result_storage: [50][64]u8 = undefined;
+    var result_slices: [50][]u8 = undefined;
+    for (0..50) |i| {
         result_slices[i] = &result_storage[i];
     }
 
-    const count = trie.autocomplete("handsome", &result_slices, 10);
+    const count = trie.autocomplete("handsome", &result_slices, 50);
+
+    std.debug.print("\nAutocomplete results for 'handsome' ({} results):\n", .{count});
     for (0..count) |i| {
-        try std.testing.expect(!std.mem.eql(u8, result_slices[i], "handsomeiy"));
+        const word = result_slices[i];
+        const valid = trie.contains(word);
+        std.debug.print("  '{s}' - {s}\n", .{ word, if (valid) "VALID" else "INVALID" });
+
+        // These specific invalid words should not appear
+        try std.testing.expect(!std.mem.eql(u8, word, "handsomeiy"));
+        try std.testing.expect(!std.mem.eql(u8, word, "handsomeiess"));
+        try std.testing.expect(!std.mem.eql(u8, word, "handsomeiness"));
     }
+}
+
+test "all autocomplete results must be valid words" {
+    const trie = EmbeddedTrie.init();
+
+    var result_storage: [500][64]u8 = undefined;
+    var result_slices: [500][]u8 = undefined;
+    for (0..500) |i| {
+        result_slices[i] = &result_storage[i];
+    }
+
+    // Test many prefixes including single letters
+    const prefixes = [_][]const u8{
+        "a",    "b",    "c",    "d",    "e",    "f",    "g",    "h",    "i",    "j",
+        "k",    "l",    "m",    "n",    "o",    "p",    "q",    "r",    "s",    "t",
+        "u",    "v",    "w",    "x",    "y",    "z",    "th",   "he",   "in",   "er",
+        "an",   "re",   "hand", "hands", "handsome", "hel",  "the",  "cat",  "run",
+        "walk", "beau", "quick", "ther", "there", "wh",   "qu",   "str",  "pre",
+    };
+
+    for (prefixes) |prefix| {
+        // Reset slices
+        for (0..500) |i| {
+            result_slices[i] = &result_storage[i];
+        }
+
+        const count = trie.autocomplete(prefix, &result_slices, 500);
+        for (0..count) |i| {
+            const word = result_slices[i];
+            // Every autocomplete result MUST exist in the trie
+            if (!trie.contains(word)) {
+                std.debug.print("\nINVALID WORD from prefix '{s}': '{s}'\n", .{ prefix, word });
+                try std.testing.expect(false);
+            }
+        }
+    }
+}
+
+test "property: random walk through autocomplete" {
+    const trie = EmbeddedTrie.init();
+
+    var result_storage: [100][64]u8 = undefined;
+    var result_slices: [100][]u8 = undefined;
+
+    // Use a deterministic RNG for reproducibility
+    var rng = std.Random.DefaultPrng.init(12345);
+    const random = rng.random();
+
+    // Current prefix we're building
+    var prefix_buf: [64]u8 = undefined;
+    var prefix_len: usize = 0;
+
+    // Start with different seed letters
+    const seeds = "abcdefghijklmnopqrstuvwxyz";
+
+    var total_checks: usize = 0;
+    var invalid_count: usize = 0;
+
+    // Run many iterations
+    for (0..500) |iteration| {
+        // Randomly decide: add char, pick suggestion, or backspace
+        const action = random.intRangeAtMost(u8, 0, 10);
+
+        if (prefix_len == 0 or action < 3) {
+            // Add a random character (bias towards this when prefix is short)
+            if (prefix_len < 60) {
+                const char_idx = random.intRangeAtMost(usize, 0, seeds.len - 1);
+                prefix_buf[prefix_len] = seeds[char_idx];
+                prefix_len += 1;
+            }
+        } else if (action < 7) {
+            // Pick a random suggestion and use it as the new prefix
+            for (0..100) |i| {
+                result_slices[i] = &result_storage[i];
+            }
+
+            const prefix = prefix_buf[0..prefix_len];
+            const count = trie.autocomplete(prefix, &result_slices, 100);
+
+            if (count > 0) {
+                // Pick a random suggestion
+                const pick = random.intRangeAtMost(usize, 0, count - 1);
+                const suggestion = result_slices[pick];
+
+                // Verify it's a valid word
+                total_checks += 1;
+                if (!trie.contains(suggestion)) {
+                    std.debug.print("\n[iter {}] INVALID: prefix='{s}' suggestion='{s}'\n", .{ iteration, prefix, suggestion });
+                    invalid_count += 1;
+                }
+
+                // Use this suggestion as the new prefix (simulating user selecting it)
+                @memcpy(prefix_buf[0..suggestion.len], suggestion);
+                prefix_len = suggestion.len;
+            }
+        } else {
+            // Backspace: remove 1-3 characters
+            const remove = random.intRangeAtMost(usize, 1, 3);
+            if (remove >= prefix_len) {
+                prefix_len = 0;
+            } else {
+                prefix_len -= remove;
+            }
+        }
+    }
+
+    std.debug.print("\nProperty test: {} suggestions checked, {} invalid\n", .{ total_checks, invalid_count });
+    try std.testing.expect(invalid_count == 0);
 }
