@@ -3,139 +3,312 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>English Dictionary Autocomplete</title>
+    <title>English Dictionary Trie</title>
     <style>
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 600px;
-            margin: 50px auto;
-            padding: 20px;
-            background: #1a1a2e;
-            color: #eee;
+            background: #ffffff;
+            min-height: 100vh;
+            padding: 40px 20px;
         }
-        h1 {
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .panel {
+            background: #000000;
+            color: #ffffff;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+            &:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+            }
+
+            h1, h2, h3 {
+                margin-bottom: 16px;
+                font-weight: 600;
+            }
+
+            h1 {
+                font-size: 28px;
+                text-align: center;
+            }
+
+            h2 {
+                font-size: 18px;
+            }
+
+            p {
+                color: rgba(255, 255, 255, 0.8);
+                line-height: 1.6;
+            }
+        }
+
+        .header-panel {
             text-align: center;
-            color: #00d9ff;
-            margin-bottom: 10px;
+
+            .stats {
+                color: rgba(255, 255, 255, 0.6);
+                font-size: 14px;
+                margin-top: 8px;
+            }
         }
-        .stats {
-            text-align: center;
-            color: #888;
-            font-size: 14px;
-            margin-bottom: 30px;
+
+        .search-panel {
+            .search-container {
+                display: grid;
+                gap: 12px;
+            }
+
+            input {
+                width: 100%;
+                padding: 16px 20px;
+                font-size: 18px;
+                border: 2px solid rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
+                background: rgba(255, 255, 255, 0.1);
+                color: #ffffff;
+                outline: none;
+                transition: border-color 0.2s, background 0.2s;
+
+                &::placeholder {
+                    color: rgba(255, 255, 255, 0.4);
+                }
+
+                &:focus {
+                    border-color: rgba(255, 255, 255, 0.5);
+                    background: rgba(255, 255, 255, 0.15);
+                }
+
+                &:disabled {
+                    opacity: 0.5;
+                }
+            }
+
+            .results {
+                display: grid;
+                gap: 2px;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 8px;
+                overflow: hidden;
+
+                &:empty {
+                    display: none;
+                }
+            }
+
+            .result-item {
+                padding: 12px 16px;
+                background: rgba(255, 255, 255, 0.05);
+                cursor: pointer;
+                transition: background 0.15s;
+
+                &:hover {
+                    background: rgba(255, 255, 255, 0.15);
+                }
+
+                .match {
+                    color: #4ade80;
+                    font-weight: 600;
+                }
+            }
+
+            .no-results {
+                padding: 16px;
+                text-align: center;
+                color: rgba(255, 255, 255, 0.5);
+            }
         }
-        .search-container {
-            position: relative;
-        }
-        input {
-            width: 100%;
-            padding: 15px 20px;
-            font-size: 18px;
-            border: 2px solid #333;
-            border-radius: 10px;
-            background: #16213e;
-            color: #fff;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-        input:focus {
-            border-color: #00d9ff;
-        }
-        input::placeholder {
-            color: #666;
-        }
-        .results {
-            margin-top: 10px;
-            background: #16213e;
-            border-radius: 10px;
-            overflow: hidden;
-            border: 2px solid #333;
-        }
-        .results:empty {
-            display: none;
-        }
-        .result-item {
-            padding: 12px 20px;
-            border-bottom: 1px solid #333;
-            cursor: pointer;
-            transition: background 0.15s;
-        }
-        .result-item:last-child {
-            border-bottom: none;
-        }
-        .result-item:hover {
-            background: #1f4068;
-        }
-        .result-item .match {
-            color: #00d9ff;
-            font-weight: bold;
-        }
-        .no-results {
-            padding: 15px 20px;
-            color: #888;
-            text-align: center;
-        }
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #888;
-        }
+
         .check-result {
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 10px;
+            padding: 16px;
+            border-radius: 8px;
             text-align: center;
+            margin-top: 12px;
+
+            &:empty {
+                display: none;
+            }
+
+            &.found {
+                background: rgba(74, 222, 128, 0.2);
+                color: #4ade80;
+            }
+
+            &.not-found {
+                background: rgba(248, 113, 113, 0.2);
+                color: #f87171;
+            }
         }
-        .check-result.found {
-            background: #1a4d1a;
-            color: #4ade80;
+
+        .info-panel {
+            p {
+                margin-bottom: 12px;
+
+                &:last-child {
+                    margin-bottom: 0;
+                }
+            }
+
+            kbd {
+                background: rgba(255, 255, 255, 0.15);
+                padding: 3px 8px;
+                border-radius: 4px;
+                font-family: monospace;
+                font-size: 13px;
+            }
         }
-        .check-result.not-found {
-            background: #4d1a1a;
-            color: #f87171;
+
+        .downloads-panel {
+            .downloads-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: 12px;
+                margin-top: 16px;
+            }
+
+            .download-item {
+                display: grid;
+                grid-template-rows: auto auto;
+                gap: 4px;
+                padding: 16px;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 8px;
+                text-decoration: none;
+                color: #ffffff;
+                text-align: center;
+                transition: background 0.15s, transform 0.15s;
+
+                &:hover {
+                    background: rgba(255, 255, 255, 0.2);
+                    transform: translateY(-1px);
+                }
+
+                .filename {
+                    font-weight: 600;
+                    font-family: monospace;
+                    font-size: 14px;
+                }
+
+                .description {
+                    font-size: 12px;
+                    color: rgba(255, 255, 255, 0.6);
+                }
+            }
         }
-        .check-result:empty {
-            display: none;
-        }
-        .instructions {
-            margin-top: 30px;
-            padding: 20px;
-            background: #16213e;
-            border-radius: 10px;
-            font-size: 14px;
-            color: #aaa;
-        }
-        .instructions h3 {
-            margin-top: 0;
-            color: #00d9ff;
-        }
-        kbd {
-            background: #333;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: monospace;
+
+        .tech-panel {
+            .tech-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 16px;
+                margin-top: 16px;
+            }
+
+            .tech-item {
+                h3 {
+                    font-size: 14px;
+                    margin-bottom: 8px;
+                    color: rgba(255, 255, 255, 0.9);
+                }
+
+                p {
+                    font-size: 13px;
+                }
+            }
         }
     </style>
 </head>
 <body>
-    <h1>English Dictionary</h1>
-    <div class="stats" id="stats">Loading...</div>
+    <div class="container">
+        <div class="panel header-panel">
+            <h1>English Dictionary Trie</h1>
+            <div class="stats" id="stats">Loading...</div>
+        </div>
 
-    <div class="search-container">
-        <input type="text" id="search" placeholder="Start typing to search..." disabled>
-        <div class="results" id="results"></div>
-    </div>
+        <div class="panel search-panel">
+            <h2>Search</h2>
+            <div class="search-container">
+                <input type="text" id="search" placeholder="Start typing to search..." disabled>
+                <div class="results" id="results"></div>
+                <div class="check-result" id="check-result"></div>
+            </div>
+        </div>
 
-    <div class="check-result" id="check-result"></div>
+        <div class="panel info-panel">
+            <h2>How to Use</h2>
+            <p>Type any prefix to see word suggestions (max 10 shown).</p>
+            <p>Press <kbd>Enter</kbd> to check if your exact input is a valid word.</p>
+            <p>The entire 236,000-word English dictionary is loaded in your browser (~4MB).</p>
+        </div>
 
-    <div class="instructions">
-        <h3>How to use</h3>
-        <p>Type any prefix to see word suggestions (max 10 shown).</p>
-        <p>Press <kbd>Enter</kbd> to check if your exact input is a valid word.</p>
-        <p>The entire 236,000-word English dictionary is loaded in your browser (~4MB).</p>
+        <div class="panel downloads-panel">
+            <h2>Downloads</h2>
+            <p>Use the compressed trie in your own projects:</p>
+            <div class="downloads-grid">
+                <a href="english.wasm" download class="download-item">
+                    <span class="filename">english.wasm</span>
+                    <span class="description">WebAssembly module</span>
+                </a>
+                <a href="english.js" download class="download-item">
+                    <span class="filename">english.js</span>
+                    <span class="description">JavaScript wrapper</span>
+                </a>
+                <a href="english.ts" download class="download-item">
+                    <span class="filename">english.ts</span>
+                    <span class="description">TypeScript wrapper</span>
+                </a>
+                <a href="english.py" download class="download-item">
+                    <span class="filename">english.py</span>
+                    <span class="description">Python wrapper</span>
+                </a>
+                <a href="english.rs" download class="download-item">
+                    <span class="filename">english.rs</span>
+                    <span class="description">Rust wrapper</span>
+                </a>
+                <a href="english.go" download class="download-item">
+                    <span class="filename">english.go</span>
+                    <span class="description">Go wrapper</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="panel tech-panel">
+            <h2>Technical Details</h2>
+            <div class="tech-grid">
+                <div class="tech-item">
+                    <h3>Compact Bitset Trie</h3>
+                    <p>Each node is only 8 bytes using bitmasks instead of pointers.</p>
+                </div>
+                <div class="tech-item">
+                    <h3>Super-Letter Compression</h3>
+                    <p>Common pairs (th, he, in, er, an, re) compressed to single tokens.</p>
+                </div>
+                <div class="tech-item">
+                    <h3>Level-Based Storage</h3>
+                    <p>Nodes organized by depth for O(1) child lookup.</p>
+                </div>
+                <div class="tech-item">
+                    <h3>~4MB Total Size</h3>
+                    <p>236,000 words in a fraction of traditional trie memory.</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -146,14 +319,10 @@
             try {
                 const response = await fetch('english.wasm');
                 const bytes = await response.arrayBuffer();
-                const result = await WebAssembly.instantiate(bytes, {
-                    env: {}
-                });
+                const result = await WebAssembly.instantiate(bytes, { env: {} });
 
                 wasm = result.instance.exports;
                 memory = wasm.memory;
-
-                // Initialize the trie
                 wasm.init();
 
                 const nodeCount = wasm.getNodeCount();
@@ -163,7 +332,6 @@
                 const input = document.getElementById('search');
                 input.disabled = false;
                 input.focus();
-
                 input.addEventListener('input', onInput);
                 input.addEventListener('keydown', onKeyDown);
 
@@ -174,7 +342,7 @@
         }
 
         function onInput(e) {
-            const query = e.target.value.trim();
+            const query = e.target.value.trim().toLowerCase();
             const resultsDiv = document.getElementById('results');
             const checkDiv = document.getElementById('check-result');
 
@@ -186,16 +354,12 @@
                 return;
             }
 
-            // Write query to WASM memory
             const encoder = new TextEncoder();
             const queryBytes = encoder.encode(query);
             const resultPtr = wasm.getResultPtr();
-
-            // Copy query to memory (we'll use the result buffer temporarily)
             const memView = new Uint8Array(memory.buffer);
             memView.set(queryBytes, resultPtr);
 
-            // Call autocomplete (max 10 results)
             const resultLen = wasm.autocomplete(resultPtr, queryBytes.length, 10);
 
             if (resultLen === 0) {
@@ -203,13 +367,11 @@
                 return;
             }
 
-            // Read results
             const decoder = new TextDecoder();
             const resultBytes = new Uint8Array(memory.buffer, resultPtr, resultLen);
             const resultText = decoder.decode(resultBytes);
             const words = resultText.split('\n').filter(w => w.length > 0);
 
-            // Render results
             resultsDiv.innerHTML = words.map(word => {
                 const matchLen = query.length;
                 const matchPart = word.slice(0, matchLen);
@@ -221,19 +383,18 @@
 
         function onKeyDown(e) {
             if (e.key === 'Enter') {
-                const query = e.target.value.trim();
+                const query = e.target.value.trim().toLowerCase();
                 if (query.length === 0) return;
 
                 const encoder = new TextEncoder();
                 const queryBytes = encoder.encode(query);
                 const resultPtr = wasm.getResultPtr();
-
                 const memView = new Uint8Array(memory.buffer);
                 memView.set(queryBytes, resultPtr);
 
                 const exists = wasm.contains(resultPtr, queryBytes.length);
-
                 const checkDiv = document.getElementById('check-result');
+
                 if (exists) {
                     checkDiv.textContent = `"${query}" is a valid English word`;
                     checkDiv.className = 'check-result found';
@@ -247,7 +408,6 @@
         function selectWord(word) {
             document.getElementById('search').value = word;
             document.getElementById('results').innerHTML = '';
-
             const checkDiv = document.getElementById('check-result');
             checkDiv.textContent = `"${word}" is a valid English word`;
             checkDiv.className = 'check-result found';
