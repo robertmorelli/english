@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>English Dictionary Autocomplete</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 {
+            text-align: center;
+            color: #00d9ff;
+            margin-bottom: 10px;
+        }
+        .stats {
+            text-align: center;
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+        .search-container {
+            position: relative;
+        }
+        input {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 18px;
+            border: 2px solid #333;
+            border-radius: 10px;
+            background: #16213e;
+            color: #fff;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus {
+            border-color: #00d9ff;
+        }
+        input::placeholder {
+            color: #666;
+        }
+        .results {
+            margin-top: 10px;
+            background: #16213e;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid #333;
+        }
+        .results:empty {
+            display: none;
+        }
+        .result-item {
+            padding: 12px 20px;
+            border-bottom: 1px solid #333;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        .result-item:hover {
+            background: #1f4068;
+        }
+        .result-item .match {
+            color: #00d9ff;
+            font-weight: bold;
+        }
+        .no-results {
+            padding: 15px 20px;
+            color: #888;
+            text-align: center;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+        .check-result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .check-result.found {
+            background: #1a4d1a;
+            color: #4ade80;
+        }
+        .check-result.not-found {
+            background: #4d1a1a;
+            color: #f87171;
+        }
+        .check-result:empty {
+            display: none;
+        }
+        .instructions {
+            margin-top: 30px;
+            padding: 20px;
+            background: #16213e;
+            border-radius: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #00d9ff;
+        }
+        kbd {
+            background: #333;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>English Dictionary</h1>
+    <div class="stats" id="stats">Loading...</div>
+
+    <div class="search-container">
+        <input type="text" id="search" placeholder="Start typing to search..." disabled>
+        <div class="results" id="results"></div>
+    </div>
+
+    <div class="check-result" id="check-result"></div>
+
+    <div class="instructions">
+        <h3>How to use</h3>
+        <p>Type any prefix to see word suggestions (max 10 shown).</p>
+        <p>Press <kbd>Enter</kbd> to check if your exact input is a valid word.</p>
+        <p>The entire 236,000-word English dictionary is loaded in your browser (~4MB).</p>
+    </div>
+
+    <script>
+        let wasm = null;
+        let memory = null;
+
+        async function init() {
+            try {
+                const response = await fetch('autocomplete_wasm.wasm');
+                const bytes = await response.arrayBuffer();
+                const result = await WebAssembly.instantiate(bytes, {
+                    env: {}
+                });
+
+                wasm = result.instance.exports;
+                memory = wasm.memory;
+
+                // Initialize the trie
+                wasm.init();
+
+                const nodeCount = wasm.getNodeCount();
+                document.getElementById('stats').textContent =
+                    `${nodeCount.toLocaleString()} trie nodes loaded`;
+
+                const input = document.getElementById('search');
+                input.disabled = false;
+                input.focus();
+
+                input.addEventListener('input', onInput);
+                input.addEventListener('keydown', onKeyDown);
+
+            } catch (err) {
+                document.getElementById('stats').textContent = 'Error loading: ' + err.message;
+                console.error(err);
+            }
+        }
+
+        function onInput(e) {
+            const query = e.target.value.trim();
+            const resultsDiv = document.getElementById('results');
+            const checkDiv = document.getElementById('check-result');
+
+            checkDiv.textContent = '';
+            checkDiv.className = 'check-result';
+
+            if (query.length === 0) {
+                resultsDiv.innerHTML = '';
+                return;
+            }
+
+            // Write query to WASM memory
+            const encoder = new TextEncoder();
+            const queryBytes = encoder.encode(query);
+            const resultPtr = wasm.getResultPtr();
+
+            // Copy query to memory (we'll use the result buffer temporarily)
+            const memView = new Uint8Array(memory.buffer);
+            memView.set(queryBytes, resultPtr);
+
+            // Call autocomplete (max 10 results)
+            const resultLen = wasm.autocomplete(resultPtr, queryBytes.length, 10);
+
+            if (resultLen === 0) {
+                resultsDiv.innerHTML = '<div class="no-results">No suggestions</div>';
+                return;
+            }
+
+            // Read results
+            const decoder = new TextDecoder();
+            const resultBytes = new Uint8Array(memory.buffer, resultPtr, resultLen);
+            const resultText = decoder.decode(resultBytes);
+            const words = resultText.split('\n').filter(w => w.length > 0);
+
+            // Render results
+            resultsDiv.innerHTML = words.map(word => {
+                const matchLen = query.length;
+                const matchPart = word.slice(0, matchLen);
+                const restPart = word.slice(matchLen);
+                return `<div class="result-item" onclick="selectWord('${word}')">` +
+                    `<span class="match">${escapeHtml(matchPart)}</span>${escapeHtml(restPart)}</div>`;
+            }).join('');
+        }
+
+        function onKeyDown(e) {
+            if (e.key === 'Enter') {
+                const query = e.target.value.trim();
+                if (query.length === 0) return;
+
+                const encoder = new TextEncoder();
+                const queryBytes = encoder.encode(query);
+                const resultPtr = wasm.getResultPtr();
+
+                const memView = new Uint8Array(memory.buffer);
+                memView.set(queryBytes, resultPtr);
+
+                const exists = wasm.contains(resultPtr, queryBytes.length);
+
+                const checkDiv = document.getElementById('check-result');
+                if (exists) {
+                    checkDiv.textContent = `"${query}" is a valid English word`;
+                    checkDiv.className = 'check-result found';
+                } else {
+                    checkDiv.textContent = `"${query}" is not in the dictionary`;
+                    checkDiv.className = 'check-result not-found';
+                }
+            }
+        }
+
+        function selectWord(word) {
+            document.getElementById('search').value = word;
+            document.getElementById('results').innerHTML = '';
+
+            const checkDiv = document.getElementById('check-result');
+            checkDiv.textContent = `"${word}" is a valid English word`;
+            checkDiv.className = 'check-result found';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        init();
+    </script>
+</body>
+</html>
