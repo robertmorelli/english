@@ -31,12 +31,12 @@ pub const EmbeddedTrie = struct {
         const nodes_size = node_count * 8;
 
         // Cast nodes data to slice of CompactNode
-        const nodes_ptr: [*]const CompactNode = @alignCast(@ptrCast(trie_data[header_size..].ptr));
+        const nodes_ptr: [*]const CompactNode = @ptrCast(@alignCast(trie_data[header_size..].ptr));
         const nodes = nodes_ptr[0..node_count];
 
         // Cast checkpoints data
         const checkpoints_offset = header_size + nodes_size;
-        const checkpoints_ptr: [*]const u32 = @alignCast(@ptrCast(trie_data[checkpoints_offset..].ptr));
+        const checkpoints_ptr: [*]const u32 = @ptrCast(@alignCast(trie_data[checkpoints_offset..].ptr));
         const checkpoints = checkpoints_ptr[0..checkpoint_count];
 
         return EmbeddedTrie{
@@ -380,4 +380,19 @@ test "autocomplete works" {
 
     const count = trie.autocomplete("hel", &result_slices, 10);
     try testing.expect(count > 0);
+}
+
+test "no invalid words" {
+    const trie = EmbeddedTrie.init();
+
+    var result_storage: [10][64]u8 = undefined;
+    var result_slices: [10][]u8 = undefined;
+    for (0..10) |i| {
+        result_slices[i] = &result_storage[i];
+    }
+
+    const count = trie.autocomplete("handsome", &result_slices, 10);
+    for (0..count) |i| {
+        try std.testing.expect(!std.mem.eql(u8, result_slices[i], "handsomeiy"));
+    }
 }
