@@ -259,9 +259,14 @@ export fn getResultPtr() [*]u8 {
 
 export fn autocomplete(input_ptr: [*]u8, input_len: usize, max_results: usize) usize {
     const trie = global_trie orelse return 0;
-    const query = input_ptr[0..input_len];
 
-    // Set up result slices in the result buffer
+    // Copy query to temporary buffer since we'll overwrite input_ptr with results
+    var query_copy: [256]u8 = undefined;
+    const query_len = @min(input_len, query_copy.len);
+    @memcpy(query_copy[0..query_len], input_ptr[0..query_len]);
+    const query = query_copy[0..query_len];
+
+    // Set up result slices
     var result_slices: [20][64]u8 = undefined;
     var slice_ptrs: [20][]u8 = undefined;
     for (0..20) |i| {
@@ -270,17 +275,19 @@ export fn autocomplete(input_ptr: [*]u8, input_len: usize, max_results: usize) u
 
     const count = trie.autocomplete(query, &slice_ptrs, @min(max_results, 20));
 
-    // Pack results into result_buffer as null-separated strings
+    // Pack results into input_ptr buffer as newline-separated strings
+    // (HTML reads from the same pointer it passed in)
     var offset: usize = 0;
     for (0..count) |i| {
         const word = slice_ptrs[i];
-        if (offset + word.len + 1 >= result_buffer.len) break;
-        @memcpy(result_buffer[offset..][0..word.len], word);
-        result_buffer[offset + word.len] = 0; // null terminator
+        if (offset + word.len + 1 >= query_buffer.len) break;
+        @memcpy(input_ptr[offset..][0..word.len], word);
+        input_ptr[offset + word.len] = '\n';
         offset += word.len + 1;
     }
 
-    return count;
+    // Return total byte length (not count) - this is what HTML expects
+    return offset;
 }
 
 export fn getResultBuffer() [*]u8 {
