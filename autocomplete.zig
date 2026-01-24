@@ -164,13 +164,20 @@ const EmbeddedTrie = struct {
         var result_count: usize = 0;
 
         // DFS to find all words from this node
-        var stack: [64]struct { node_idx: u32, level: u32, token_depth: usize } = undefined;
+        // Each stack entry stores the token that led to that node, so we can restore
+        // token_buf correctly when siblings have overwritten it
+        var stack: [64]struct { node_idx: u32, level: u32, token_depth: usize, token: u8 } = undefined;
         var stack_size: usize = 1;
-        stack[0] = .{ .node_idx = nav.node_idx, .level = nav.level, .token_depth = prefix_token_len };
+        stack[0] = .{ .node_idx = nav.node_idx, .level = nav.level, .token_depth = prefix_token_len, .token = 0 };
 
         while (stack_size > 0 and result_count < max_results) {
             stack_size -= 1;
             const current = stack[stack_size];
+
+            // Restore the token buffer for this path - siblings may have overwritten it
+            if (current.token_depth > prefix_token_len) {
+                token_buf[current.token_depth - 1] = current.token;
+            }
 
             const node = self.nodes[current.node_idx];
 
@@ -219,6 +226,7 @@ const EmbeddedTrie = struct {
                     .node_idx = child_idx,
                     .level = current.level + 1,
                     .token_depth = current.token_depth + 1,
+                    .token = bit,
                 };
                 stack_size += 1;
             }
