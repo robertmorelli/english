@@ -11,7 +11,7 @@ const CompactNode = extern struct {
     terminators_mask: u32,
 };
 
-const EmbeddedTrie = struct {
+pub const EmbeddedTrie = struct {
     nodes: []const CompactNode,
     checkpoints: []const u32,
     level_basis: [50]u32,

@@ -16,14 +16,14 @@ all: build cli
 
 build: $(WASM_OUTPUT)
 
-$(WASM_OUTPUT): $(SRC_AUTOCOMPLETE) $(SRC_TRIE) trie_data.bin
-	$(ZIG) build-lib $(SRC_AUTOCOMPLETE) -target wasm32-freestanding $(ZIG_BUILD_FLAGS) -femit-bin=$(WASM_OUTPUT)
+$(WASM_OUTPUT): wasm.zig $(SRC_TRIE) trie_data.bin
+	$(ZIG) build-lib wasm.zig -target wasm32-freestanding $(ZIG_BUILD_FLAGS) -femit-bin=$(WASM_OUTPUT)
 
 cli: $(CLI_OUTPUT)
 
-$(CLI_OUTPUT): $(SRC_AUTOCOMPLETE) $(SRC_TRIE)
-	$(ZIG) build-exe $(SRC_AUTOCOMPLETE) $(ZIG_BUILD_FLAGS)
-	@mv autocomplete $(CLI_OUTPUT)
+$(CLI_OUTPUT): cli.zig $(SRC_AUTOCOMPLETE) $(SRC_TRIE)
+	$(ZIG) build-exe cli.zig $(ZIG_BUILD_FLAGS)
+	@mv cli $(CLI_OUTPUT)
 
 clean:
 	@rm -f $(CLI_OUTPUT) $(WASM_OUTPUT)
