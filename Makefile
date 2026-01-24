@@ -27,7 +27,7 @@ $(CLI_OUTPUT): $(SRC_AUTOCOMPLETE) $(SRC_TRIE) $(TRIE_DATA)
 wasm: $(WASM_OUTPUT)
 
 $(WASM_OUTPUT): $(SRC_WASM) $(SRC_TRIE) $(TRIE_DATA)
-	$(ZIG) build-lib $(SRC_WASM) -target wasm32-freestanding $(ZIG_BUILD_FLAGS) -femit-bin=$(WASM_OUTPUT)
+	$(ZIG) build-exe $(SRC_WASM) -target wasm32-freestanding -fno-entry -rdynamic $(ZIG_BUILD_FLAGS) -femit-bin=$(WASM_OUTPUT)
 
 # Run tests
 test:

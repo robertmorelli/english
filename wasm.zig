@@ -235,3 +235,91 @@ const EmbeddedTrie = struct {
         return result_count;
     }
 };
+
+// Global state for WASM
+var global_trie: ?EmbeddedTrie = null;
+var query_buffer: [256]u8 = undefined;
+var result_buffer: [4096]u8 = undefined;
+
+// WASM exports
+export fn init() void {
+    global_trie = EmbeddedTrie.init();
+}
+
+export fn getNodeCount() u32 {
+    if (global_trie) |trie| {
+        return @intCast(trie.nodes.len);
+    }
+    return 0;
+}
+
+export fn getResultPtr() [*]u8 {
+    return &query_buffer;
+}
+
+export fn autocomplete(input_ptr: [*]u8, input_len: usize, max_results: usize) usize {
+    const trie = global_trie orelse return 0;
+    const query = input_ptr[0..input_len];
+
+    // Set up result slices in the result buffer
+    var result_slices: [20][64]u8 = undefined;
+    var slice_ptrs: [20][]u8 = undefined;
+    for (0..20) |i| {
+        slice_ptrs[i] = &result_slices[i];
+    }
+
+    const count = trie.autocomplete(query, &slice_ptrs, @min(max_results, 20));
+
+    // Pack results into result_buffer as null-separated strings
+    var offset: usize = 0;
+    for (0..count) |i| {
+        const word = slice_ptrs[i];
+        if (offset + word.len + 1 >= result_buffer.len) break;
+        @memcpy(result_buffer[offset..][0..word.len], word);
+        result_buffer[offset + word.len] = 0; // null terminator
+        offset += word.len + 1;
+    }
+
+    return count;
+}
+
+export fn getResultBuffer() [*]u8 {
+    return &result_buffer;
+}
+
+export fn contains(input_ptr: [*]u8, input_len: usize) bool {
+    const trie = global_trie orelse return false;
+    const query = input_ptr[0..input_len];
+
+    var token_buf: [128]u8 = undefined;
+    const token_len = EmbeddedTrie.tokenize(query, &token_buf);
+    const tokens = token_buf[0..token_len];
+
+    if (tokens.len == 0) return false;
+
+    var current_idx: u32 = 0;
+    var current_level: u32 = 0;
+
+    for (tokens, 0..) |char_code, i| {
+        const is_last = (i == tokens.len - 1);
+        const mask = @as(u32, 1) << @intCast(char_code);
+
+        if (is_last) {
+            return (trie.nodes[current_idx].terminators_mask & mask) != 0;
+        }
+
+        if (trie.nodes[current_idx].children_mask & mask == 0) {
+            return false;
+        }
+
+        const mask_below = mask - 1;
+        const rank = @popCount(trie.nodes[current_idx].children_mask & mask_below);
+        const offset_base = trie.getChildrenOffset(current_idx, current_level);
+        const level_start = trie.level_basis[current_level + 1];
+
+        current_idx = level_start + offset_base + rank;
+        current_level += 1;
+    }
+
+    return false;
+}
