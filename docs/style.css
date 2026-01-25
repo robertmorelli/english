@@ -1,0 +1,47 @@
+body {
+  display: grid;
+  width: 100vw;
+  height: 100vh;
+  align-items: center;
+  justify-items: center;
+
+  #search-box {
+    display: grid;
+
+    >input {
+      grid-row: 1;
+      grid-column: 1;
+      padding: 1rem;
+
+      &[type="reset"] {
+        width: 2rem;
+        height: 2rem;
+        margin-right: 1rem;
+        background: black;
+        justify-self: right;
+        align-self: center;
+        width: 2rem;
+        height: 2rem;
+        color: palegreen;
+        text-align: center;
+        padding: 0 0;
+      }
+
+      &[type="text"] {
+        anchor-name: --search;
+        font-size: 2rem;
+        width: 20rem;
+        background: black;
+        color: white;
+      }
+    }
+  }
+
+  #results {
+    position: fixed;
+    position-anchor: --search;
+    position-area: bottom center;
+    justify-self: left;
+    text-decoration: underline;
+  }
+}

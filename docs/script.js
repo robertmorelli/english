@@ -1,0 +1,30 @@
+
+
+window.onload = async () => {
+  const input = document.getElementById('search');
+  const resultsbox = document.getElementById('results');
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const response = await fetch('english.wasm');
+  const bytes = await response.arrayBuffer();
+  const result = await WebAssembly.instantiate(bytes, { env: {} });
+
+  wasm = result.instance.exports;
+  memory = wasm.memory;
+  wasm.init();
+
+  input.disabled = false;
+  input.focus();
+  input.addEventListener('input', (e) => {
+    const query = e.target.value.trim().toLowerCase();
+    const queryBytes = encoder.encode(query);
+    const resultPtr = wasm.getResultPtr();
+    const memView = new Uint8Array(memory.buffer);
+    memView.set(queryBytes, resultPtr);
+
+    const resultLen = wasm.autocomplete(resultPtr, queryBytes.length, 100);
+
+    const resultBytes = new Uint8Array(memory.buffer, resultPtr, resultLen);
+    resultsbox.innerHTML = decoder.decode(resultBytes);
+  })
+};
