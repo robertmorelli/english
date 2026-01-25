@@ -17,12 +17,12 @@ body {
         width: 2rem;
         height: 2rem;
         margin-right: 1rem;
-        background: black;
+        background: #222;
         justify-self: right;
         align-self: center;
         width: 2rem;
         height: 2rem;
-        color: palegreen;
+        color: #777;
         text-align: center;
         padding: 0 0;
       }
