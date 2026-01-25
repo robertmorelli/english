@@ -22,7 +22,7 @@ window.onload = async () => {
     const memView = new Uint8Array(memory.buffer);
     memView.set(queryBytes, resultPtr);
 
-    const resultLen = wasm.autocomplete(resultPtr, queryBytes.length, 100);
+    const resultLen = wasm.autocomplete(resultPtr, queryBytes.length, 10);
 
     const resultBytes = new Uint8Array(memory.buffer, resultPtr, resultLen);
     resultsbox.innerHTML = decoder.decode(resultBytes);
