@@ -1,4 +1,5 @@
 const std = @import("std");
+const testing = std.testing;
 
 // Embed the pre-built trie data
 const trie_data = @embedFile("trie_data.bin");
@@ -11,39 +12,113 @@ const CompactNode = extern struct {
     terminators_mask: u32,
 };
 
+const HeaderSize = 8 + 50 * 4; // 208 bytes
+
 const EmbeddedTrie = struct {
-    nodes: []const CompactNode,
-    checkpoints: []const u32,
+    nodes: []CompactNode,
+    checkpoints: []u32,
     level_basis: [50]u32,
+    allocator: std.mem.Allocator,
 
     pub fn init() EmbeddedTrie {
-        // Parse header
-        const node_count = std.mem.readInt(u32, trie_data[0..4], .little);
-        const checkpoint_count = std.mem.readInt(u32, trie_data[4..8], .little);
+        return EmbeddedTrie.initFromBytes(trie_data, std.heap.page_allocator) catch unreachable;
+    }
+
+    pub fn initFromBytes(data: []const u8, allocator: std.mem.Allocator) !EmbeddedTrie {
+        if (data.len < HeaderSize) return error.InvalidFormat;
+
+        const node_count = std.mem.readInt(u32, data[0..4], .little);
+        const checkpoint_count = std.mem.readInt(u32, data[4..8], .little);
 
         var level_basis: [50]u32 = undefined;
         for (0..50) |i| {
             const offset = 8 + i * 4;
-            level_basis[i] = std.mem.readInt(u32, trie_data[offset..][0..4], .little);
+            level_basis[i] = std.mem.readInt(u32, data[offset..][0..4], .little);
         }
 
-        const header_size = 8 + 50 * 4; // 208 bytes
-        const nodes_size = node_count * 8;
+        var nodes = try allocator.alloc(CompactNode, node_count);
+        errdefer allocator.free(nodes);
+        var checkpoints = try allocator.alloc(u32, checkpoint_count);
+        errdefer allocator.free(checkpoints);
 
-        // Cast nodes data to slice of CompactNode
-        const nodes_ptr: [*]const CompactNode = @alignCast(@ptrCast(trie_data[header_size..].ptr));
-        const nodes = nodes_ptr[0..node_count];
+        const fixed_nodes_size = @as(usize, node_count) * 8;
+        const fixed_total_size = HeaderSize + fixed_nodes_size + @as(usize, checkpoint_count) * 4;
 
-        // Cast checkpoints data
-        const checkpoints_offset = header_size + nodes_size;
-        const checkpoints_ptr: [*]const u32 = @alignCast(@ptrCast(trie_data[checkpoints_offset..].ptr));
-        const checkpoints = checkpoints_ptr[0..checkpoint_count];
+        if (data.len == fixed_total_size) {
+            // Legacy fixed-width format (8 bytes per node).
+            var offset: usize = HeaderSize;
+            for (0..node_count) |i| {
+                const children_mask = std.mem.readInt(u32, data[offset..][0..4], .little);
+                const terminators_mask = std.mem.readInt(u32, data[offset + 4 ..][0..4], .little);
+                nodes[i] = .{
+                    .children_mask = children_mask,
+                    .terminators_mask = terminators_mask,
+                };
+                offset += 8;
+            }
+
+            var cp_offset: usize = HeaderSize + fixed_nodes_size;
+            for (0..checkpoint_count) |i| {
+                checkpoints[i] = std.mem.readInt(u32, data[cp_offset..][0..4], .little);
+                cp_offset += 4;
+            }
+        } else {
+            // Packed variable-width format.
+            const checkpoints_bytes = @as(usize, checkpoint_count) * 4;
+            if (data.len < HeaderSize + checkpoints_bytes) return error.InvalidFormat;
+            const nodes_end = data.len - checkpoints_bytes;
+
+            var offset: usize = HeaderSize;
+            for (0..node_count) |i| {
+                if (offset >= nodes_end) return error.InvalidFormat;
+                const len_byte = data[offset];
+                offset += 1;
+
+                const children_len: usize = @as(usize, (len_byte & 0b11)) + 1;
+                const terminators_len: usize = @as(usize, ((len_byte >> 2) & 0b11)) + 1;
+
+                const children_mask = try readMask(data, &offset, nodes_end, children_len);
+                const terminators_mask = try readMask(data, &offset, nodes_end, terminators_len);
+
+                nodes[i] = .{
+                    .children_mask = children_mask,
+                    .terminators_mask = terminators_mask,
+                };
+            }
+
+            if (offset != nodes_end) return error.InvalidFormat;
+
+            var cp_offset: usize = nodes_end;
+            for (0..checkpoint_count) |i| {
+                checkpoints[i] = std.mem.readInt(u32, data[cp_offset..][0..4], .little);
+                cp_offset += 4;
+            }
+        }
 
         return EmbeddedTrie{
             .nodes = nodes,
             .checkpoints = checkpoints,
             .level_basis = level_basis,
+            .allocator = allocator,
         };
+    }
+
+    pub fn deinit(self: *EmbeddedTrie) void {
+        self.allocator.free(self.nodes);
+        self.allocator.free(self.checkpoints);
+    }
+
+    fn readMask(data: []const u8, offset: *usize, end: usize, len: usize) !u32 {
+        if (len == 0 or len > 4) return error.InvalidFormat;
+        if (offset.* + len > end) return error.InvalidFormat;
+
+        var value: u32 = 0;
+        for (0..len) |i| {
+            const shift: u5 = @intCast(i * 8);
+            value |= @as(u32, data[offset.* + i]) << shift;
+        }
+        offset.* += len;
+        return value;
     }
 
     fn getChildrenOffset(self: *const EmbeddedTrie, node_idx: u32, level: u32) u32 {
@@ -377,7 +452,9 @@ var result_buffer: [4096]u8 = undefined;
 
 // WASM exports
 export fn init() void {
-    global_trie = EmbeddedTrie.init();
+    if (global_trie == null) {
+        global_trie = EmbeddedTrie.init();
+    }
 }
 
 export fn getNodeCount() u32 {
@@ -432,4 +509,186 @@ export fn contains(input_ptr: [*]u8, input_len: usize) bool {
     const trie = global_trie orelse return false;
     const query = input_ptr[0..input_len];
     return trie.contains(query);
+}
+
+fn maskByteLen(mask: u32) u8 {
+    if (mask == 0) return 1;
+    var m = mask;
+    var len: u8 = 0;
+    while (m != 0) : (len += 1) {
+        m >>= 8;
+    }
+    return len;
+}
+
+fn appendU32LE(list: *std.ArrayList(u8), gpa: std.mem.Allocator, value: u32) !void {
+    var buf: [4]u8 = undefined;
+    std.mem.writeInt(u32, buf[0..], value, .little);
+    try list.appendSlice(gpa, buf[0..]);
+}
+
+fn appendMaskBytes(list: *std.ArrayList(u8), gpa: std.mem.Allocator, mask: u32, len: u8) !void {
+    var i: u8 = 0;
+    while (i < len) : (i += 1) {
+        const shift: u5 = @intCast(i * 8);
+        const byte = @as(u8, @intCast((mask >> shift) & 0xFF));
+        try list.append(gpa, byte);
+    }
+}
+
+fn appendPackedNode(list: *std.ArrayList(u8), gpa: std.mem.Allocator, children_mask: u32, terminators_mask: u32) !void {
+    const c_len = maskByteLen(children_mask);
+    const t_len = maskByteLen(terminators_mask);
+    const length_byte: u8 = ((t_len - 1) << 2) | (c_len - 1);
+    try list.append(gpa, length_byte);
+    try appendMaskBytes(list, gpa, children_mask, c_len);
+    try appendMaskBytes(list, gpa, terminators_mask, t_len);
+}
+
+fn appendFixedNode(list: *std.ArrayList(u8), gpa: std.mem.Allocator, children_mask: u32, terminators_mask: u32) !void {
+    try appendU32LE(list, gpa, children_mask);
+    try appendU32LE(list, gpa, terminators_mask);
+}
+
+test "packed format simple trie contains" {
+    var data = std.ArrayList(u8).empty;
+    defer data.deinit(testing.allocator);
+
+    const node_count: u32 = 3;
+    const checkpoint_count: u32 = 1;
+
+    try appendU32LE(&data, testing.allocator, node_count);
+    try appendU32LE(&data, testing.allocator, checkpoint_count);
+
+    var level_basis = [_]u32{0} ** 50;
+    level_basis[1] = 1;
+    level_basis[2] = 3;
+    for (3..50) |i| level_basis[i] = 3;
+    for (level_basis) |lb| try appendU32LE(&data, testing.allocator, lb);
+
+    try appendPackedNode(&data, testing.allocator, 0b11, 0b11); // root
+    try appendPackedNode(&data, testing.allocator, 0, 0b10); // "a" node (terminates "ab")
+    try appendPackedNode(&data, testing.allocator, 0, 0); // "b" node
+    try appendU32LE(&data, testing.allocator, 0); // checkpoint[0]
+
+    var trie = try EmbeddedTrie.initFromBytes(data.items, testing.allocator);
+    defer trie.deinit();
+
+    try testing.expect(trie.contains("a"));
+    try testing.expect(trie.contains("ab"));
+    try testing.expect(trie.contains("b"));
+    try testing.expect(!trie.contains("ba"));
+    try testing.expect(!trie.contains("aa"));
+}
+
+test "fixed format simple trie contains" {
+    var data = std.ArrayList(u8).empty;
+    defer data.deinit(testing.allocator);
+
+    const node_count: u32 = 3;
+    const checkpoint_count: u32 = 1;
+
+    try appendU32LE(&data, testing.allocator, node_count);
+    try appendU32LE(&data, testing.allocator, checkpoint_count);
+
+    var level_basis = [_]u32{0} ** 50;
+    level_basis[1] = 1;
+    level_basis[2] = 3;
+    for (3..50) |i| level_basis[i] = 3;
+    for (level_basis) |lb| try appendU32LE(&data, testing.allocator, lb);
+
+    try appendFixedNode(&data, testing.allocator, 0b11, 0b11); // root
+    try appendFixedNode(&data, testing.allocator, 0, 0b10); // "a" node (terminates "ab")
+    try appendFixedNode(&data, testing.allocator, 0, 0); // "b" node
+    try appendU32LE(&data, testing.allocator, 0); // checkpoint[0]
+
+    var trie = try EmbeddedTrie.initFromBytes(data.items, testing.allocator);
+    defer trie.deinit();
+
+    try testing.expect(trie.contains("a"));
+    try testing.expect(trie.contains("ab"));
+    try testing.expect(trie.contains("b"));
+    try testing.expect(!trie.contains("ba"));
+    try testing.expect(!trie.contains("aa"));
+}
+
+test "packed format decodes 1-4 byte masks" {
+    var data = std.ArrayList(u8).empty;
+    defer data.deinit(testing.allocator);
+
+    const node_count: u32 = 2;
+    const checkpoint_count: u32 = 1;
+
+    try appendU32LE(&data, testing.allocator, node_count);
+    try appendU32LE(&data, testing.allocator, checkpoint_count);
+
+    const level_basis = [_]u32{0} ** 50;
+    for (level_basis) |lb| try appendU32LE(&data, testing.allocator, lb);
+
+    const n0_children: u32 = 0x00000001; // 1 byte
+    const n0_terms: u32 = 0x00000100; // 2 bytes
+    const n1_children: u32 = 0x00010000; // 3 bytes
+    const n1_terms: u32 = 0x80000000; // 4 bytes
+
+    try appendPackedNode(&data, testing.allocator, n0_children, n0_terms);
+    try appendPackedNode(&data, testing.allocator, n1_children, n1_terms);
+    try appendU32LE(&data, testing.allocator, 0);
+
+    var trie = try EmbeddedTrie.initFromBytes(data.items, testing.allocator);
+    defer trie.deinit();
+
+    try testing.expectEqual(n0_children, trie.nodes[0].children_mask);
+    try testing.expectEqual(n0_terms, trie.nodes[0].terminators_mask);
+    try testing.expectEqual(n1_children, trie.nodes[1].children_mask);
+    try testing.expectEqual(n1_terms, trie.nodes[1].terminators_mask);
+}
+
+test "initFromBytes rejects truncated packed data" {
+    var data = std.ArrayList(u8).empty;
+    defer data.deinit(testing.allocator);
+
+    const node_count: u32 = 1;
+    const checkpoint_count: u32 = 1;
+
+    try appendU32LE(&data, testing.allocator, node_count);
+    try appendU32LE(&data, testing.allocator, checkpoint_count);
+
+    const level_basis = [_]u32{0} ** 50;
+    for (level_basis) |lb| try appendU32LE(&data, testing.allocator, lb);
+
+    // No node data, only checkpoint: should fail.
+    try appendU32LE(&data, testing.allocator, 0);
+
+    try testing.expectError(error.InvalidFormat, EmbeddedTrie.initFromBytes(data.items, testing.allocator));
+}
+
+test "initFromBytes rejects extra packed bytes" {
+    var data = std.ArrayList(u8).empty;
+    defer data.deinit(testing.allocator);
+
+    const node_count: u32 = 1;
+    const checkpoint_count: u32 = 1;
+
+    try appendU32LE(&data, testing.allocator, node_count);
+    try appendU32LE(&data, testing.allocator, checkpoint_count);
+
+    const level_basis = [_]u32{0} ** 50;
+    for (level_basis) |lb| try appendU32LE(&data, testing.allocator, lb);
+
+    try appendPackedNode(&data, testing.allocator, 0, 0);
+    try data.append(testing.allocator, 0xAA); // stray byte that should not belong to nodes
+    try appendU32LE(&data, testing.allocator, 0);
+
+    try testing.expectError(error.InvalidFormat, EmbeddedTrie.initFromBytes(data.items, testing.allocator));
+}
+
+test "maskByteLen boundaries" {
+    try testing.expectEqual(@as(u8, 1), maskByteLen(0));
+    try testing.expectEqual(@as(u8, 1), maskByteLen(0xFF));
+    try testing.expectEqual(@as(u8, 2), maskByteLen(0x100));
+    try testing.expectEqual(@as(u8, 2), maskByteLen(0xFFFF));
+    try testing.expectEqual(@as(u8, 3), maskByteLen(0x1_0000));
+    try testing.expectEqual(@as(u8, 3), maskByteLen(0xFF_FFFF));
+    try testing.expectEqual(@as(u8, 4), maskByteLen(0x1_000000));
+    try testing.expectEqual(@as(u8, 4), maskByteLen(0x8000_0000));
 }

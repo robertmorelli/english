@@ -1,12 +1,12 @@
 # Compact English Trie
 
-A space-optimized trie implementation containing the entire English dictionary (~236,000 words) in ~4MB, with WebAssembly support for browser-based autocomplete.
+A space-optimized trie implementation containing the entire English dictionary (~236,000 words) in ~2.3 MB on disk (~4MB in-memory), with WebAssembly support for browser-based autocomplete.
 
 ## How It Works
 
 ### Data Structure
 
-This trie uses a **bitset-based compact representation** instead of traditional pointer-based nodes. Each node is only 8 bytes:
+This trie uses a **bitset-based compact representation** instead of traditional pointer-based nodes. In-memory, each node is only 8 bytes:
 
 ```
 CompactNode {
@@ -65,7 +65,7 @@ For "cat" and "cats":
 | `trie.zig` | Core trie builder and frozen reader |
 | `autocomplete.zig` | Autocomplete implementation with CLI and WASM support |
 | `build_trie.py` | Python script to build trie from `/usr/share/dict/words` |
-| `trie_data.bin` | Pre-built serialized trie (~4.1 MB) |
+| `trie_data.bin` | Pre-built serialized trie (~2.3 MB) |
 | `docs/` | Web demo with WASM-compiled autocomplete |
 
 ## Usage
@@ -122,12 +122,18 @@ Header (208 bytes):
   u32: checkpoint_count
   [50]u32: level_basis
 
-Nodes (8 bytes each):
-  u32: children_mask
-  u32: terminators_mask
+Nodes (variable length per node):
+  u8: length byte
+    - bits 0-1: children_mask byte length minus 1 (1-4 bytes)
+    - bits 2-3: terminators_mask byte length minus 1 (1-4 bytes)
+  children_mask bytes (little-endian)
+  terminators_mask bytes (little-endian)
 
 Checkpoints (4 bytes each):
   u32: cumulative popcount (for faster child offset calculation)
+
+Note: checkpoints start at the end of the file. The packed nodes blob length is:
+  file_size - header_size - checkpoint_count * 4
 ```
 
 ## Building the Trie
@@ -157,4 +163,4 @@ Where:
 
 Traditional pointer-based tries can use 64+ bytes per node. This implementation uses only 8 bytes per node, achieving ~5-8x compression while maintaining O(1) child access via bit operations.
 
-Result: 236,000 English words in 4.1 MB (vs 10-20+ MB for traditional tries).
+Result: 236,000 English words in ~2.3 MB on disk (vs 10-20+ MB for traditional tries).

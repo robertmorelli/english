@@ -7,9 +7,12 @@ The serialization format:
     - u32: node_count
     - u32: checkpoint_count
     - [50]u32: level_basis
-  Nodes (8 bytes each):
-    - u32: children_mask
-    - u32: terminators_mask
+  Nodes (variable length per node):
+    - u8: length byte
+      - bits 0-1: children_mask byte length minus 1 (1-4 bytes)
+      - bits 2-3: terminators_mask byte length minus 1 (1-4 bytes)
+    - children_mask bytes (little-endian)
+    - terminators_mask bytes (little-endian)
   Checkpoints (4 bytes each):
     - u32: cumulative popcount
 """
@@ -145,10 +148,24 @@ class TrieBuilder:
         for lb in self.level_basis:
             data.extend(struct.pack('<I', lb))  # level_basis[50]
 
-        # Nodes
+        def mask_bytes(mask: int) -> bytes:
+            if mask == 0:
+                return b"\x00"
+            length = (mask.bit_length() + 7) // 8
+            return mask.to_bytes(length, "little")
+
+        # Nodes (packed)
         for node in valid_nodes:
-            data.extend(struct.pack('<I', node.children_mask))
-            data.extend(struct.pack('<I', node.terminators_mask))
+            c_bytes = mask_bytes(node.children_mask)
+            t_bytes = mask_bytes(node.terminators_mask)
+            c_len = len(c_bytes)
+            t_len = len(t_bytes)
+            if not (1 <= c_len <= 4 and 1 <= t_len <= 4):
+                raise ValueError(f"Invalid mask byte length: c={c_len}, t={t_len}")
+            length_byte = ((t_len - 1) << 2) | (c_len - 1)
+            data.append(length_byte)
+            data.extend(c_bytes)
+            data.extend(t_bytes)
 
         # Checkpoints
         for cp in checkpoints:
