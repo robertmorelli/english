@@ -7,6 +7,9 @@ const trie_data = @embedFile("trie_data.bin");
 // Super letter pairs (must match build script)
 const super_pairs = [_][]const u8{ "th", "he", "in", "er", "an", "re" };
 
+// Terminator-only suffix tokens (must match build script)
+const terminator_suffixes = [_][]const u8{ "ess", "ion", "ous", "ly", "ic", "al" };
+
 const CompactNode = extern struct {
     children_mask: u32,
     terminators_mask: u32,
@@ -172,6 +175,57 @@ const EmbeddedTrie = struct {
         return out_idx;
     }
 
+    fn getTerminatorToken(word: []const u8) ?struct { token: u5, prefix_len: usize } {
+        if (word.len == 0) return null;
+        for (word) |c| {
+            if (c < 'a' or c > 'z') return null;
+        }
+
+        if (word.len >= 3) {
+            const suffix3 = word[word.len - 3 ..];
+            for (terminator_suffixes, 0..) |suffix, idx| {
+                if (suffix.len == 3 and std.mem.eql(u8, suffix, suffix3)) {
+                    return .{
+                        .token = @intCast(26 + idx),
+                        .prefix_len = word.len - 3,
+                    };
+                }
+            }
+        }
+
+        if (word.len >= 2) {
+            const suffix2 = word[word.len - 2 ..];
+            for (terminator_suffixes, 0..) |suffix, idx| {
+                if (suffix.len == 2 and std.mem.eql(u8, suffix, suffix2)) {
+                    return .{
+                        .token = @intCast(26 + idx),
+                        .prefix_len = word.len - 2,
+                    };
+                }
+            }
+        }
+
+        return .{
+            .token = @intCast(word[word.len - 1] - 'a'),
+            .prefix_len = word.len - 1,
+        };
+    }
+
+    fn appendTerminatorToken(out_buffer: []u8, out_idx: *usize, token: u5) bool {
+        if (token < 26) {
+            if (out_idx.* + 1 > out_buffer.len) return false;
+            out_buffer[out_idx.*] = @as(u8, 'a') + @as(u8, token);
+            out_idx.* += 1;
+            return true;
+        }
+
+        const suffix = terminator_suffixes[@as(usize, @intCast(token - 26))];
+        if (out_idx.* + suffix.len > out_buffer.len) return false;
+        @memcpy(out_buffer[out_idx.* ..][0..suffix.len], suffix);
+        out_idx.* += suffix.len;
+        return true;
+    }
+
     //need two of these for the return in case of bigram
     const prefixLocation = ?struct { node_idx: u32, level: u32, tokens_used: usize };
 
@@ -326,12 +380,12 @@ const EmbeddedTrie = struct {
                             const bit: u5 = @intCast(@ctz(t_mask));
                             t_mask &= t_mask - 1;
 
-                            token_buf[current.token_depth] = @intCast(bit);
-
                             // Build candidate
                             var tmp: [64]u8 = undefined;
-                            const word_len = untokenize(token_buf[0 .. current.token_depth + 1], &tmp);
-                            const cand = tmp[0..word_len];
+                            var out_idx = untokenize(token_buf[0..current.token_depth], &tmp);
+                            if (!appendTerminatorToken(tmp[0..], &out_idx, bit)) continue;
+                            const cand = tmp[0..out_idx];
+                            const word_len = cand.len;
 
                             // MUST start with the original user prefix (this makes slot-2 correct)
                             if (!std.mem.startsWith(u8, cand, prefix)) continue;
@@ -402,33 +456,17 @@ const EmbeddedTrie = struct {
 
     /// Check if a word exists in the trie
     pub fn contains(self: *const EmbeddedTrie, word: []const u8) bool {
-        var i: usize = 0;
+        const term = getTerminatorToken(word) orelse return false;
+
+        var token_buf: [128]u8 = undefined;
+        const len = tokenize(word[0..term.prefix_len], &token_buf);
+        const tokens = token_buf[0..len];
+
         var current_idx: u32 = 0;
         var current_level: u32 = 0;
 
-        while (i < word.len) {
-            var code: u5 = 0;
-            var is_pair = false;
-
-            for (super_pairs, 0..) |pair, p_idx| {
-                if (i + 1 < word.len and word[i] == pair[0] and word[i + 1] == pair[1]) {
-                    code = @intCast(26 + p_idx);
-                    i += 2;
-                    is_pair = true;
-                    break;
-                }
-            }
-            if (!is_pair) {
-                if (word[i] < 'a' or word[i] > 'z') return false;
-                code = @intCast(word[i] - 'a');
-                i += 1;
-            }
-
-            if (i == word.len) {
-                const mask = @as(u32, 1) << code;
-                return (self.nodes[current_idx].terminators_mask & mask) != 0;
-            }
-
+        for (tokens) |char_code| {
+            const code: u5 = @intCast(char_code);
             const mask = @as(u32, 1) << code;
             if (self.nodes[current_idx].children_mask & mask == 0) return false;
 
@@ -441,7 +479,9 @@ const EmbeddedTrie = struct {
             current_idx = level_start + offset_base + rank;
             current_level += 1;
         }
-        return false;
+
+        const term_mask = @as(u32, 1) << term.token;
+        return (self.nodes[current_idx].terminators_mask & term_mask) != 0;
     }
 };
 
@@ -680,6 +720,46 @@ test "initFromBytes rejects extra packed bytes" {
     try appendU32LE(&data, testing.allocator, 0);
 
     try testing.expectError(error.InvalidFormat, EmbeddedTrie.initFromBytes(data.items, testing.allocator));
+}
+
+test "terminator suffix tokens in packed trie" {
+    var data = std.ArrayList(u8).empty;
+    defer data.deinit(testing.allocator);
+
+    const node_count: u32 = 3;
+    const checkpoint_count: u32 = 1;
+
+    try appendU32LE(&data, testing.allocator, node_count);
+    try appendU32LE(&data, testing.allocator, checkpoint_count);
+
+    var level_basis = [_]u32{0} ** 50;
+    level_basis[1] = 1;
+    level_basis[2] = 2;
+    for (3..50) |i| level_basis[i] = 3;
+    for (level_basis) |lb| try appendU32LE(&data, testing.allocator, lb);
+
+    const tok_ion: u5 = @intCast(26 + 1);
+    const tok_ly: u5 = @intCast(26 + 3);
+    const root_terms: u32 = (@as(u32, 1) << tok_ion) | (@as(u32, 1) << tok_ly);
+    const node2_terms: u32 = (@as(u32, 1) << tok_ly);
+
+    // root: terminators for "ion" and "ly", child 'a'
+    try appendPackedNode(&data, testing.allocator, @as(u32, 1) << @as(u5, 0), root_terms);
+    // node 'a': child 'l'
+    try appendPackedNode(&data, testing.allocator, @as(u32, 1) << @as(u5, 11), 0);
+    // node 'al': terminator "ly"
+    try appendPackedNode(&data, testing.allocator, 0, node2_terms);
+
+    try appendU32LE(&data, testing.allocator, 0);
+
+    var trie = try EmbeddedTrie.initFromBytes(data.items, testing.allocator);
+    defer trie.deinit();
+
+    try testing.expect(trie.contains("ly"));
+    try testing.expect(trie.contains("ion"));
+    try testing.expect(trie.contains("ally"));
+    try testing.expect(!trie.contains("al"));
+    try testing.expect(!trie.contains("l"));
 }
 
 test "maskByteLen boundaries" {

@@ -1,6 +1,6 @@
 # Compact English Trie
 
-A space-optimized trie implementation containing the entire English dictionary (~236,000 words) in ~2.3 MB on disk (~4MB in-memory), with WebAssembly support for browser-based autocomplete.
+A space-optimized trie implementation containing the entire English dictionary (~236,000 words) in ~2.15 MB on disk (~4MB in-memory), with WebAssembly support for browser-based autocomplete.
 
 ## How It Works
 
@@ -15,9 +15,10 @@ CompactNode {
 }
 ```
 
-Each bit (0-31) represents a character:
+Each bit (0-31) represents a token:
 - Bits 0-25: Letters 'a' through 'z'
-- Bits 26-31: Super-letter pairs (see below)
+- Bits 26-31: Super-letter pairs for `children_mask`
+- Bits 26-31: Terminator-only suffix tokens for `terminators_mask`
 
 ### Super-Letter Optimization
 
@@ -33,6 +34,22 @@ Common two-letter pairs are compressed into single tokens:
 | 31 | "re" |
 
 For example, "there" is tokenized as `[26, 29, 4]` (th + er + e) instead of 5 separate characters.
+
+### Terminator Suffix Optimization
+
+The terminator bitset uses a separate suffix table to compress common word endings.
+These tokens are **only** used to mark the end of a word; they are never used as child nodes.
+
+| Token | Suffix |
+|-------|--------|
+| 26 | "ess" |
+| 27 | "ion" |
+| 28 | "ous" |
+| 29 | "ly" |
+| 30 | "ic" |
+| 31 | "al" |
+
+For example, "happiness" ends at the node for "happin" with terminator token 26 ("ess").
 
 ### Level-Based Storage
 
@@ -65,7 +82,7 @@ For "cat" and "cats":
 | `trie.zig` | Core trie builder and frozen reader |
 | `autocomplete.zig` | Autocomplete implementation with CLI and WASM support |
 | `build_trie.py` | Python script to build trie from `/usr/share/dict/words` |
-| `trie_data.bin` | Pre-built serialized trie (~2.3 MB) |
+| `trie_data.bin` | Pre-built serialized trie (~2.15 MB) |
 | `docs/` | Web demo with WASM-compiled autocomplete |
 
 ## Usage
@@ -163,4 +180,4 @@ Where:
 
 Traditional pointer-based tries can use 64+ bytes per node. This implementation uses only 8 bytes per node, achieving ~5-8x compression while maintaining O(1) child access via bit operations.
 
-Result: 236,000 English words in ~2.3 MB on disk (vs 10-20+ MB for traditional tries).
+Result: 236,000 English words in ~2.15 MB on disk (vs 10-20+ MB for traditional tries).

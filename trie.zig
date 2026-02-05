@@ -9,6 +9,11 @@ const SuperLetterMap = struct {
     // getBitIndex removed: we handle conversion in tokenize/loops directly
 };
 
+const TerminatorSuffixes = struct {
+    // Most common endings weighted by token savings vs current encoding
+    const tokens = [_][]const u8{ "ess", "ion", "ous", "ly", "ic", "al" };
+};
+
 const CompactNode = extern struct {
     children_mask: u32 = 0,
     terminators_mask: u32 = 0,
@@ -72,24 +77,56 @@ pub const TrieBuilder = struct {
         return out_idx;
     }
 
+    fn getTerminatorToken(word: []const u8) ?struct { token: u5, prefix_len: usize } {
+        if (word.len == 0) return null;
+        // Validate input: lowercase letters only
+        for (word) |c| {
+            if (c < 'a' or c > 'z') return null;
+        }
+
+        if (word.len >= 3) {
+            const suffix3 = word[word.len - 3 ..];
+            for (TerminatorSuffixes.tokens, 0..) |suffix, idx| {
+                if (suffix.len == 3 and std.mem.eql(u8, suffix, suffix3)) {
+                    return .{
+                        .token = @intCast(26 + idx),
+                        .prefix_len = word.len - 3,
+                    };
+                }
+            }
+        }
+
+        if (word.len >= 2) {
+            const suffix2 = word[word.len - 2 ..];
+            for (TerminatorSuffixes.tokens, 0..) |suffix, idx| {
+                if (suffix.len == 2 and std.mem.eql(u8, suffix, suffix2)) {
+                    return .{
+                        .token = @intCast(26 + idx),
+                        .prefix_len = word.len - 2,
+                    };
+                }
+            }
+        }
+
+        return .{
+            .token = @intCast(word[word.len - 1] - 'a'),
+            .prefix_len = word.len - 1,
+        };
+    }
+
     pub fn addWord(self: *TrieBuilder, word: []const u8) !void {
+        const term = getTerminatorToken(word) orelse return;
+
         var token_buf: [128]u8 = undefined;
-        const len = tokenize(word, &token_buf);
+        const len = tokenize(word[0..term.prefix_len], &token_buf);
         const tokens = token_buf[0..len];
 
         var current_level: u32 = 0;
         var current_idx: u32 = 0;
 
-        for (tokens, 0..) |char_code, i| {
+        for (tokens) |char_code| {
             // char_code is already 0-31. No conversion needed.
-            const is_last_char = (i == tokens.len - 1);
             const bit: u5 = @intCast(char_code);
-
-            if (is_last_char) {
-                self.nodes[current_idx].terminators_mask |= (@as(u32, 1) << bit);
-                return;
-            }
-
             const mask = @as(u32, 1) << bit;
 
             if (self.nodes[current_idx].children_mask & mask == 0) {
@@ -99,6 +136,8 @@ pub const TrieBuilder = struct {
             current_idx = self.getChildIndex(current_idx, current_level, char_code);
             current_level += 1;
         }
+
+        self.nodes[current_idx].terminators_mask |= (@as(u32, 1) << term.token);
     }
 
     fn getChildIndex(self: *TrieBuilder, parent_idx: u32, level: u32, char_code: u8) u32 {
@@ -202,33 +241,17 @@ pub const FrozenTrie = struct {
     }
 
     pub fn contains(self: *const FrozenTrie, word: []const u8) bool {
-        var i: usize = 0;
+        const term = TrieBuilder.getTerminatorToken(word) orelse return false;
+
+        var token_buf: [128]u8 = undefined;
+        const len = TrieBuilder.tokenize(word[0..term.prefix_len], &token_buf);
+        const tokens = token_buf[0..len];
+
         var current_idx: u32 = 0;
         var current_level: u32 = 0;
 
-        while (i < word.len) {
-            var code: u5 = 0;
-            var is_pair = false;
-
-            for (SuperLetterMap.pairs, 0..) |pair, p_idx| {
-                if (i + 1 < word.len and word[i] == pair[0] and word[i + 1] == pair[1]) {
-                    code = @intCast(26 + p_idx);
-                    i += 2;
-                    is_pair = true;
-                    break;
-                }
-            }
-            if (!is_pair) {
-                if (word[i] < 'a' or word[i] > 'z') return false;
-                code = @intCast(word[i] - 'a');
-                i += 1;
-            }
-
-            if (i == word.len) {
-                const mask = @as(u32, 1) << code;
-                return (self.nodes[current_idx].terminators_mask & mask) != 0;
-            }
-
+        for (tokens) |char_code| {
+            const code: u5 = @intCast(char_code);
             const mask = @as(u32, 1) << code;
             if (self.nodes[current_idx].children_mask & mask == 0) return false;
 
@@ -241,7 +264,9 @@ pub const FrozenTrie = struct {
             current_idx = level_start + offset_base + rank_in_node;
             current_level += 1;
         }
-        return false;
+
+        const term_mask = @as(u32, 1) << term.token;
+        return (self.nodes[current_idx].terminators_mask & term_mask) != 0;
     }
 };
 
@@ -276,6 +301,40 @@ test "super letters optimization" {
 
     try testing.expect(frozen.contains("the"));
     try testing.expect(!frozen.contains("th"));
+}
+
+test "terminator suffix tokens" {
+    var builder = try TrieBuilder.init(testing.allocator);
+    defer builder.deinit();
+
+    const words = [_][]const u8{
+        "happiness",
+        "nation",
+        "curious",
+        "quickly",
+        "basic",
+        "final",
+        "theic",
+        "ly",
+        "al",
+        "running",
+    };
+
+    for (words) |w| try builder.addWord(w);
+
+    var frozen = try builder.freeze(testing.allocator);
+    defer frozen.deinit();
+
+    for (words) |w| try testing.expect(frozen.contains(w));
+
+    try testing.expect(!frozen.contains("happines"));
+    try testing.expect(!frozen.contains("natio"));
+    try testing.expect(!frozen.contains("curiou"));
+    try testing.expect(!frozen.contains("quickl"));
+    try testing.expect(!frozen.contains("basi"));
+    try testing.expect(!frozen.contains("fina"));
+    try testing.expect(!frozen.contains("thei"));
+    try testing.expect(!frozen.contains("runnin"));
 }
 
 test "large number of nodes to trigger checkpoints" {

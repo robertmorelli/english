@@ -24,6 +24,11 @@ from typing import List, Tuple
 # Super letter pairs (same as in trie.zig)
 SUPER_PAIRS = ["th", "he", "in", "er", "an", "re"]
 
+# Terminator-only suffix tokens (most common weighted by token savings)
+TERMINATOR_SUFFIXES = ["ess", "ion", "ous", "ly", "ic", "al"]
+TERM_SUFFIX_3 = {s: i for i, s in enumerate(TERMINATOR_SUFFIXES) if len(s) == 3}
+TERM_SUFFIX_2 = {s: i for i, s in enumerate(TERMINATOR_SUFFIXES) if len(s) == 2}
+
 class BuilderNode:
     __slots__ = ['children_mask', 'terminators_mask', 'children_offset']
 
@@ -104,20 +109,31 @@ class TrieBuilder:
             p += 1
 
     def add_word(self, word: str):
-        tokens = self.tokenize(word)
-        if not tokens:
+        if not word:
             return
+
+        # Determine terminator token (longest suffix match)
+        term_token = None
+        prefix_len = len(word) - 1
+        if len(word) >= 3:
+            suffix3 = word[-3:]
+            if suffix3 in TERM_SUFFIX_3:
+                term_token = 26 + TERM_SUFFIX_3[suffix3]
+                prefix_len = len(word) - 3
+        if term_token is None and len(word) >= 2:
+            suffix2 = word[-2:]
+            if suffix2 in TERM_SUFFIX_2:
+                term_token = 26 + TERM_SUFFIX_2[suffix2]
+                prefix_len = len(word) - 2
+        if term_token is None:
+            term_token = ord(word[-1]) - ord('a')
+
+        tokens = self.tokenize(word[:prefix_len])
 
         current_level = 0
         current_idx = 0
 
-        for i, char_code in enumerate(tokens):
-            is_last_char = (i == len(tokens) - 1)
-
-            if is_last_char:
-                self.nodes[current_idx].terminators_mask |= (1 << char_code)
-                return
-
+        for char_code in tokens:
             mask = 1 << char_code
 
             if (self.nodes[current_idx].children_mask & mask) == 0:
@@ -125,6 +141,8 @@ class TrieBuilder:
 
             current_idx = self.get_child_index(current_idx, current_level, char_code)
             current_level += 1
+
+        self.nodes[current_idx].terminators_mask |= (1 << term_token)
 
     def serialize(self) -> bytes:
         """Serialize the trie to binary format."""
