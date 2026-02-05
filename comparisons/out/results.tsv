@@ -1,0 +1,4 @@
+name	bytes	ratio_to_raw
+our_trie	2253645	0.9076
+marisa-trie	725328	0.2921
+darts-clone-rs	3977216	1.6017

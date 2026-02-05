@@ -181,3 +181,8 @@ Where:
 Traditional pointer-based tries can use 64+ bytes per node. This implementation uses only 8 bytes per node, achieving ~5-8x compression while maintaining O(1) child access via bit operations.
 
 Result: 236,000 English words in ~2.15 MB on disk (vs 10-20+ MB for traditional tries).
+
+## Comparisons
+
+Run `bash comparisons/run_comparisons.sh` to generate a Markdown report at `comparisons/out/REPORT.md`.
+The report includes a size table for this trie and other implementations on the same normalized word list.

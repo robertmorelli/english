@@ -1,0 +1,5 @@
+/build/
+/vendor/
+/data/words.txt
+/out/*.dic
+/out/*.bin
