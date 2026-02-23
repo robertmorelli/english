@@ -55,16 +55,15 @@ body {
     font-size: calc(0.75rem + var(--wave) * 0.75rem);
 
     background: oklch(0.65 0.2 calc(var(--i) / var(--n) * 360));
-    color: white;
     padding: 0.2em 0.6em;
 
-    opacity: 0;
+    color: transparent;
     animation: fade 300ms ease forwards calc(var(--i) * 100ms);
   }
 }
 
 @keyframes fade {
   to {
-    opacity: 1;
+    color: white;
   }
 }
