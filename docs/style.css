@@ -66,7 +66,7 @@ body {
     --box-color: oklch(0.65 0.2 calc(var(--i) / var(--n) * 360));
     color: var(--box-color);
     background: white;
-    animation: fade 100ms ease forwards calc(var(--i) * 50ms);
+    animation: fade 150ms ease forwards calc(var(--i) * 100ms);
   }
 }
 
