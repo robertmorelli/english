@@ -53,7 +53,7 @@ body {
     --n: sibling-count();
 
     --angle: calc(var(--i) * 137.5deg);
-    --r: calc(sqrt(var(--i)) * 80px);
+    --r: calc(5rem + calc(sqrt(var(--i)) * 40rem));
     transform: translate(calc(cos(var(--angle)) * var(--r) - 50%), calc(sin(var(--angle)) * var(--r) - 50%));
 
     --wave: calc(sin(var(--i) * 83deg) * 0.5 + 0.5);
