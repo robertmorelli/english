@@ -16,6 +16,11 @@ window.onload = async () => {
   input.focus();
 
   const update = () => {
+    document.querySelectorAll('form ~ span')
+      .forEach(
+        (el) =>
+          el.remove());
+
     const queryBytes = encoder
       .encode(
         input.value
@@ -27,11 +32,6 @@ window.onload = async () => {
     const resultPtr = wasm.getResultPtr();
     const memView = new Uint8Array(memory.buffer);
     memView.set(queryBytes, resultPtr);
-
-    document.querySelectorAll('form ~ span')
-      .forEach(
-        (el) =>
-          el.remove());
   
     decoder
       .decode(
