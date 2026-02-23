@@ -58,7 +58,7 @@ body {
     padding: 0.2em 0.6em;
 
     color: transparent;
-    animation: fade 300ms ease forwards calc(var(--i) * 100ms);
+    animation: fade 100ms ease forwards calc(var(--i) * 50ms);
   }
 }
 

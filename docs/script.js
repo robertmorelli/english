@@ -27,7 +27,7 @@ window.onload = async () => {
           .trim()
           .toLowerCase());
 
-    if (!queryBytes) return;
+    if (!queryBytes.length) return;
 
     const resultPtr = wasm.getResultPtr();
     const memView = new Uint8Array(memory.buffer);
@@ -42,7 +42,7 @@ window.onload = async () => {
             .autocomplete(
               resultPtr,
               queryBytes.length,
-              10)))
+              100)))
       .trim()
       .split(/\s+/)
       .filter(Boolean)
