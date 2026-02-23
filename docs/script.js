@@ -48,7 +48,7 @@ window.onload = async () => {
       .filter(Boolean)
       .map(
         (word) =>
-          Object.update(
+          Object.assign(
             document.createElement('span'),
             {textContent: word}))
       .forEach(
