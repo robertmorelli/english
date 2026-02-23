@@ -9,7 +9,7 @@ body {
     anchor-name: --hub;
     display: grid;
 
-    >input {
+    > input {
       grid-row: 1;
       grid-column: 1;
       padding: 1rem;
@@ -21,8 +21,6 @@ body {
         background: #222;
         justify-self: right;
         align-self: center;
-        width: 2rem;
-        height: 2rem;
         color: #777;
         text-align: center;
         padding: 0 0;
@@ -38,34 +36,35 @@ body {
     }
   }
 
-}
+  form ~ span {
+    position: fixed;
+    position-anchor: --hub;
+    top: anchor(center);
+    left: anchor(center);
+    white-space: nowrap;
+    font-weight: 600;
 
-form ~ span {
-  position: fixed;
-  position-anchor: --hub;
-  top: anchor(center);
-  left: anchor(center);
-  white-space: nowrap;
-  font-weight: 600;
+    --i: sibling-index();
+    --n: sibling-count();
 
-  --i: sibling-index();
-  --n: sibling-count();
+    --angle: calc(var(--i) * 137.5deg);
+    --r: calc(sqrt(var(--i)) * 80px);
+    transform: translate(calc(cos(var(--angle)) * var(--r) - 50%), calc(sin(var(--angle)) * var(--r) - 50%));
 
-  --angle: calc(var(--i) * 137.5deg);
-  --r: calc(sqrt(var(--i)) * 80px);
-  transform: translate(calc(cos(var(--angle)) * var(--r) - 50%), calc(sin(var(--angle)) * var(--r) - 50%));
+    --wave: calc(sin(var(--i) * 83deg) * 0.5 + 0.5);
+    font-size: calc(0.75rem + var(--wave) * 0.75rem);
 
-  --wave: calc(sin(var(--i) * 83deg) * 0.5 + 0.5);
-  font-size: calc(0.75rem + var(--wave) * 0.75rem);
+    background: oklch(0.65 0.2 calc(var(--i) / var(--n) * 360));
+    color: white;
+    padding: 0.2em 0.6em;
 
-  background: oklch(0.65 0.2 calc(var(--i) / var(--n) * 360));
-  color: white;
-  padding: 0.2em 0.6em;
-
-  opacity: 0;
-  animation: fade 0.4s ease forwards calc(var(--i) * 60ms);
+    opacity: 0;
+    animation: fade 100ms ease forwards calc(var(--i) * 10ms);
+  }
 }
 
 @keyframes fade {
-  to { opacity: 1; }
+  to {
+    opacity: 1;
+  }
 }

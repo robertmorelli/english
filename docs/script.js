@@ -14,8 +14,9 @@ window.onload = async () => {
 
   input.disabled = false;
   input.focus();
-  input.addEventListener('input', (e) => {
-    const query = e.target.value.trim().toLowerCase();
+
+  const update = () => {
+    const query = input.value.trim().toLowerCase();
     const queryBytes = encoder.encode(query);
     const resultPtr = wasm.getResultPtr();
     const memView = new Uint8Array(memory.buffer);
@@ -31,5 +32,8 @@ window.onload = async () => {
       span.textContent = word;
       document.body.appendChild(span);
     });
-  })
+  };
+
+  input.addEventListener('input', update);
+  document.getElementById('search-box').addEventListener('reset', () => setTimeout(update));
 };
