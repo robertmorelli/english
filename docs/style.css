@@ -59,10 +59,13 @@ body {
     --wave: calc(sin(var(--i) * 83deg) * 0.5 + 0.5);
     font-size: calc(0.75rem + var(--wave) * 0.75rem);
 
-    background: oklch(0.65 0.2 calc(var(--i) / var(--n) * 360));
+
     padding: 0.2em 0.6em;
 
-    color: transparent;
+
+    --box-color: oklch(0.65 0.2 calc(var(--i) / var(--n) * 360));
+    color: var(--box-color);
+    background: white;
     animation: fade 100ms ease forwards calc(var(--i) * 50ms);
   }
 }
@@ -70,5 +73,6 @@ body {
 @keyframes fade {
   to {
     color: white;
+    background: var(--box-color);
   }
 }
