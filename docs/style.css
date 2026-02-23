@@ -6,6 +6,7 @@ body {
   justify-items: center;
 
   #search-box {
+    anchor-name: --hub;
     display: grid;
 
     >input {
@@ -37,11 +38,34 @@ body {
     }
   }
 
-  #results {
-    position: fixed;
-    position-anchor: --search;
-    position-area: bottom center;
-    justify-self: left;
-    text-decoration: underline;
-  }
+}
+
+form ~ span {
+  position: fixed;
+  position-anchor: --hub;
+  top: anchor(center);
+  left: anchor(center);
+  white-space: nowrap;
+  font-weight: 600;
+
+  --i: sibling-index();
+  --n: sibling-count();
+
+  --angle: calc(var(--i) * 137.5deg);
+  --r: calc(sqrt(var(--i)) * 80px);
+  transform: translate(calc(cos(var(--angle)) * var(--r) - 50%), calc(sin(var(--angle)) * var(--r) - 50%));
+
+  --wave: calc(sin(var(--i) * 83deg) * 0.5 + 0.5);
+  font-size: calc(0.75rem + var(--wave) * 0.75rem);
+
+  background: oklch(0.65 0.2 calc(var(--i) / var(--n) * 360));
+  color: white;
+  padding: 0.2em 0.6em;
+
+  opacity: 0;
+  animation: fade 0.4s ease forwards calc(var(--i) * 60ms);
+}
+
+@keyframes fade {
+  to { opacity: 1; }
 }

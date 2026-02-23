@@ -2,7 +2,6 @@
 
 window.onload = async () => {
   const input = document.getElementById('search');
-  const resultsbox = document.getElementById('results');
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   const response = await fetch('english.wasm');
@@ -24,7 +23,13 @@ window.onload = async () => {
 
     const resultLen = wasm.autocomplete(resultPtr, queryBytes.length, 10);
 
+    document.querySelectorAll('form ~ span').forEach(el => el.remove());
     const resultBytes = new Uint8Array(memory.buffer, resultPtr, resultLen);
-    resultsbox.innerHTML = decoder.decode(resultBytes);
+    const words = decoder.decode(resultBytes).trim().split(/\s+/).filter(Boolean);
+    words.forEach((word) => {
+      const span = document.createElement('span');
+      span.textContent = word;
+      document.body.appendChild(span);
+    });
   })
 };
