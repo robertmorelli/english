@@ -29,6 +29,13 @@ window.onload = async () => {
 
     if (!queryBytes.length) return;
 
+    
+    const existsPtr = wasm.getResultBuffer();
+    new Uint8Array(memory.buffer)
+      .set(queryBytes, existsPtr);
+    const wordExists = wasm.contains(existsPtr, queryBytes.length);
+    document.body.className = wordExists ? "word-exists" : ""
+
     const resultPtr = wasm.getResultPtr();
     const memView = new Uint8Array(memory.buffer);
     memView.set(queryBytes, resultPtr);
@@ -42,7 +49,7 @@ window.onload = async () => {
             .autocomplete(
               resultPtr,
               queryBytes.length,
-              100)))
+              1000)))
       .trim()
       .split(/\s+/)
       .filter(Boolean)
