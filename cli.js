@@ -34,11 +34,15 @@ function makeApi(instance) {
             return Number(E.getNodeCount());
         },
         contains(word) {
-            const { ptr, len } = writeStr(word);
+            const filtered = word.toLowerCase().replace(/[^a-z]/g, '');
+            if (!filtered) return false;
+            const { ptr, len } = writeStr(filtered);
             return Number(E.contains(ptr, len)) !== 0;
         },
         autocomplete(prefix, maxResults = 20) {
-            const { ptr, len } = writeStr(prefix);
+            const filtered = prefix.toLowerCase().replace(/[^a-z]/g, '');
+            if (!filtered) return [];
+            const { ptr, len } = writeStr(filtered);
             const byteLen = Number(E.autocomplete(ptr, len, maxResults));
             if (byteLen === 0) return [];
             const resultBytes = u8().subarray(ptr, ptr + byteLen);
@@ -62,7 +66,7 @@ rl.setPrompt("> ");
 rl.prompt();
 
 rl.on("line", (line) => {
-    const trimmed = line.trim().toLowerCase();
+    const trimmed = line.trim().toLowerCase().replace(/[^a-z]/g, '');
     if (!trimmed) {
         rl.prompt();
         return;

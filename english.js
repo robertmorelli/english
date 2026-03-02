@@ -21,7 +21,8 @@ export class EnglishTrie {
     }
 
     isWord(word) {
-        const normalized = word.trim().toLowerCase();
+        const normalized = word.trim().toLowerCase().replace(/[^a-z]/g, '');
+        if (!normalized) return false;
         const bytes = this.encoder.encode(normalized);
         const ptr = this.wasm.getResultBuffer();
         new Uint8Array(this.wasm.memory.buffer).set(bytes, ptr);
@@ -29,7 +30,7 @@ export class EnglishTrie {
     }
 
     getCompletions(prefix, maxResults = 100) {
-        const normalized = prefix.trim().toLowerCase();
+        const normalized = prefix.trim().toLowerCase().replace(/[^a-z]/g, '');
         if (!normalized) return [];
 
         const bytes = this.encoder.encode(normalized);
