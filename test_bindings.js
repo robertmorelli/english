@@ -29,7 +29,7 @@ async function testBindings() {
     // Validate TypeScript bindings file
     const bindingsContent = fs.readFileSync(bindingsPath, 'utf8');
     const requiredMethods = ['isWord', 'getCompletions'];
-    
+
     for (const method of requiredMethods) {
         if (!bindingsContent.includes(method)) {
             console.error(`ERROR: Bindings missing method '${method}'`);
@@ -45,7 +45,7 @@ async function testBindings() {
 
     // Test WASM functionality with high-level API
     const wasmBytes = fs.readFileSync(wasmPath);
-    
+
     // Inline EnglishTrie class implementation (matches english.js)
     class EnglishTrie {
         constructor(wasmPath) {
@@ -53,14 +53,14 @@ async function testBindings() {
                 const bytes = typeof wasmPath === 'string'
                     ? fs.readFileSync(wasmPath)
                     : wasmPath;
-                
+
                 const result = await WebAssembly.instantiate(bytes, { env: {} });
-                
+
                 this.wasm = result.instance.exports;
                 this.encoder = new TextEncoder();
                 this.decoder = new TextDecoder();
                 this.wasm.init();
-                
+
                 return this;
             })();
         }
@@ -80,17 +80,17 @@ async function testBindings() {
             const bytes = this.encoder.encode(normalized);
             const ptr = this.wasm.getResultPtr();
             new Uint8Array(this.wasm.memory.buffer).set(bytes, ptr);
-            
+
             const resultLength = this.wasm.autocomplete(ptr, bytes.length, maxResults);
             const resultBytes = new Uint8Array(this.wasm.memory.buffer, ptr, resultLength);
             const resultString = this.decoder.decode(resultBytes);
-            
+
             return resultString.trim().split(/\s+/).filter(Boolean);
         }
     }
 
     const trie = await new EnglishTrie(wasmPath);
-    
+
     console.log('✓ Trie initialized successfully');
 
     // Test isWord function
