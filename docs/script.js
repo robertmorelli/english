@@ -1,16 +1,9 @@
 
+import { EnglishTrie } from './english.js';
 
 window.onload = async () => {
   const input = document.getElementById('search');
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  const response = await fetch('english.wasm');
-  const bytes = await response.arrayBuffer();
-  const result = await WebAssembly.instantiate(bytes, { env: {} });
-
-  wasm = result.instance.exports;
-  memory = wasm.memory;
-  wasm.init();
+  const trie = await new EnglishTrie('english.wasm');
 
   input.disabled = false;
   input.focus();
@@ -21,43 +14,19 @@ window.onload = async () => {
         (el) =>
           el.remove());
 
-    const queryBytes = encoder
-      .encode(
-        input.value
-          .trim()
-          .toLowerCase());
+    const query = input.value.trim().toLowerCase();
+    if (!query) return;
 
-    if (!queryBytes.length) return;
-
-    
-    const existsPtr = wasm.getResultBuffer();
-    new Uint8Array(memory.buffer)
-      .set(queryBytes, existsPtr);
-    const wordExists = wasm.contains(existsPtr, queryBytes.length);
+    const wordExists = trie.isWord(query);
     document.body.className = wordExists ? "word-exists" : ""
 
-    const resultPtr = wasm.getResultPtr();
-    const memView = new Uint8Array(memory.buffer);
-    memView.set(queryBytes, resultPtr);
-  
-    decoder
-      .decode(
-        new Uint8Array(
-          memory.buffer,
-          resultPtr,
-          wasm
-            .autocomplete(
-              resultPtr,
-              queryBytes.length,
-              1000)))
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
+    trie
+      .getCompletions(query, 1000)
       .map(
         (word) =>
           Object.assign(
             document.createElement('span'),
-            {textContent: word}))
+            { textContent: word }))
       .forEach(
         (span) =>
           document.body.appendChild(span));
@@ -65,4 +34,8 @@ window.onload = async () => {
 
   input.addEventListener('input', update);
   document.getElementById('search-box').addEventListener('reset', () => setTimeout(update));
+
+  document.getElementById('download').addEventListener('click', () => {
+    window.location.href = './english.zip';
+  });
 };

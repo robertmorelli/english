@@ -19,8 +19,21 @@ body {
     --input-font-weight: bolder;
   }
 
+  #download {
+    grid-row: 1;
+    grid-column: 1;
+    width: 2rem;
+    height: 2rem;
+    background: black;
+    align-self: baseline;
+    justify-self: baseline;
+    color: white;
+  }
+
 
   #search-box {
+    grid-row: 1;
+    grid-column: 1;
     anchor-name: --hub;
     display: grid;
 
