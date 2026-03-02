@@ -1,3 +1,8 @@
+/**
+ * TypeScript bindings for english.wasm
+ * A compact English dictionary trie compiled to WebAssembly
+ */
+
 interface WasmExports {
   init(): void;
   getResultPtr(): number;
@@ -32,5 +37,5 @@ export class EnglishTrie {
    * @param maxResults Maximum number of completions to return
    * @returns Array of word completions
    */
-  getCompletions(prefix: string, maxResults: number): string[];
+  getCompletions(prefix: string, maxResults?: number): string[];
 }
