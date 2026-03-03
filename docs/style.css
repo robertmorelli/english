@@ -1,103 +1,130 @@
-* {
-  box-sizing: border-box;
-  overflow: hidden;
-  font-family: Monaco;
-}
-
-body {
-  display: grid;
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  justify-items: center;
-
-  --input-accent: none;
-  --input-font-weight: normal;
-
-  &.word-exists {
-    --input-accent: underline;
-    --input-font-weight: bolder;
+@supports (width: calc(sibling-index() * 1px)) and (width: calc(sibling-count() * 1px)) {
+  * {
+    box-sizing: border-box;
+    overflow: hidden;
+    font-family: Monaco;
   }
 
-  #download {
-    grid-row: 1;
-    grid-column: 1;
-    width: 2rem;
-    height: 2rem;
-    background: black;
-    align-self: baseline;
-    justify-self: baseline;
-    color: white;
-  }
-
-
-  #search-box {
-    grid-row: 1;
-    grid-column: 1;
-    anchor-name: --hub;
+  body {
     display: grid;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-items: center;
 
-    >input {
+    --input-accent: none;
+    --input-font-weight: normal;
+
+    &.word-exists {
+      --input-accent: underline;
+      --input-font-weight: bolder;
+    }
+
+    #download {
       grid-row: 1;
       grid-column: 1;
-      padding: 1rem;
+      width: 2rem;
+      height: 2rem;
+      background: black;
+      align-self: baseline;
+      justify-self: baseline;
+      color: white;
+    }
 
-      &[type="reset"] {
-        width: 2rem;
-        height: 2rem;
-        margin-right: 1rem;
-        background: white;
-        justify-self: right;
-        align-self: center;
-        color: black;
-        text-align: center;
-        padding: 0 0;
-      }
 
-      &[type="text"] {
-        anchor-name: --search;
-        font-size: 2rem;
-        width: 20rem;
-        background: black;
-        color: white;
-        text-decoration: var(--input-accent);
-        font-weight: var(--input-font-weight);
+    #search-box {
+      grid-row: 1;
+      grid-column: 1;
+      anchor-name: --hub;
+      display: grid;
+
+      >input {
+        grid-row: 1;
+        grid-column: 1;
+        padding: 1rem;
+
+        &[type="reset"] {
+          width: 2rem;
+          height: 2rem;
+          margin-right: 1rem;
+          background: white;
+          justify-self: right;
+          align-self: center;
+          color: black;
+          text-align: center;
+          padding: 0 0;
+        }
+
+        &[type="text"] {
+          anchor-name: --search;
+          font-size: 2rem;
+          width: 20rem;
+          background: black;
+          color: white;
+          text-decoration: var(--input-accent);
+          font-weight: var(--input-font-weight);
+        }
       }
+    }
+
+    form~span {
+      position: fixed;
+      position-anchor: --hub;
+      top: anchor(center);
+      left: anchor(center);
+      white-space: nowrap;
+      font-weight: 600;
+
+      --i: sibling-index();
+      --n: sibling-count();
+
+      --angle: calc(var(--i) * 137.5deg);
+      --r: calc(2rem + calc(sqrt(var(--i)) * 6rem));
+      transform: translate(calc(cos(var(--angle)) * var(--r) - 50%), calc(sin(var(--angle)) * var(--r) - 50%));
+
+      --wave: calc(sin(var(--i) * 83deg) * 0.5 + 0.5);
+      font-size: calc(0.8rem + var(--wave) * 0.6rem);
+
+
+      padding: 0.2em 0.6em;
+
+
+      --box-color: oklch(0.65 0.2 calc(var(--i) / var(--n) * 360));
+      color: var(--box-color);
+      background: transparent;
+      animation: fade 600ms ease forwards calc(250ms + var(--i) * 10ms);
     }
   }
 
-  form~span {
-    position: fixed;
-    position-anchor: --hub;
-    top: anchor(center);
-    left: anchor(center);
-    white-space: nowrap;
-    font-weight: 600;
-
-    --i: sibling-index();
-    --n: sibling-count();
-
-    --angle: calc(var(--i) * 137.5deg);
-    --r: calc(2rem + calc(sqrt(var(--i)) * 6rem));
-    transform: translate(calc(cos(var(--angle)) * var(--r) - 50%), calc(sin(var(--angle)) * var(--r) - 50%));
-
-    --wave: calc(sin(var(--i) * 83deg) * 0.5 + 0.5);
-    font-size: calc(0.8rem + var(--wave) * 0.6rem);
-
-
-    padding: 0.2em 0.6em;
-
-
-    --box-color: oklch(0.65 0.2 calc(var(--i) / var(--n) * 360));
-    color: var(--box-color);
-    background: transparent;
-    animation: fade 600ms ease forwards calc(250ms + var(--i) * 10ms);
+  @keyframes fade {
+    to {
+      color: white;
+      background: var(--box-color);
+    }
   }
 }
 
-@keyframes fade {
-  to {
+@supports not ((width: calc(sibling-index() * 1px)) and (width: calc(sibling-count() * 1px))) {
+  body {
+    background: black;
     color: white;
-    background: var(--box-color);
+    font-size: 2rem;
+    font-family: monospace;
+    font-weight: bolder;
+    text-decoration: underline;
+    display: grid;
+    height: 100%;
+    overflow: hidden;
+
+    * {
+      display: none;
+    }
+
+    &::after {
+      text-align: center;
+      align-self: center;
+      text-wrap: balance;
+      content: "Use a real browser instead of a broken toy";
+    }
   }
 }
