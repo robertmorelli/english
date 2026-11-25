@@ -1,0 +1,101 @@
+using trie from "../src/trie.utu"
+
+let read_file_len: fun(Str) I32 = @es/\
+    (path) => {
+        const fs = require("node:fs");
+        globalThis.__testBuf = fs.readFileSync(path);
+        return globalThis.__testBuf.length;
+    }
+\/
+
+let read_file_byte: fun(I32) I32 = @es/\
+    (i) => globalThis.__testBuf[i]
+\/
+
+fn load_full_trie() trie.Trie {
+    let n = read_file_len("docs/trie_data.bin")
+    let bytes: Array[I32] = Array[I32].new(n, 0)
+    let i = 0
+    while (i < n) {
+        bytes[i] = read_file_byte(i)
+        i += 1
+    }
+    return promote trie.from_bytes(bytes) {
+        |t| => t,
+        ~> {
+            fatal
+        },
+    }
+}
+
+test "contains common words and rejects non-words" {
+    let t = load_full_trie()
+    assert t.node_count > 400000
+    assert trie.contains(t, "hello")
+    assert trie.contains(t, "world")
+    assert trie.contains(t, "the")
+    assert trie.contains(t, "computer")
+    assert trie.contains(t, "HELLO")
+    assert not trie.contains(t, "xyzzynotaword")
+    assert not trie.contains(t, "")
+}
+
+test "autocomplete returns valid words" {
+    let t = load_full_trie()
+    let r = trie.autocomplete(t, "hel", 10)
+    assert r.len() > 0
+    for (r) |w| {
+        assert w.len() > 0
+        assert trie.contains(t, w)
+    }
+}
+
+test "handsome autocomplete has no invalid variants" {
+    let t = load_full_trie()
+    let res = trie.autocomplete(t, "handsome", 50)
+    for (res) |w| {
+        assert w.len() > 0
+        assert trie.contains(t, w)
+        assert w != "handsomeiy"
+        assert w != "handsomeiess"
+        assert w != "handsomeiness"
+    }
+}
+
+test "backtrack on bigrams" {
+    let t = load_full_trie()
+    let res = trie.autocomplete(t, "wort", 50)
+    assert res.len() > 0
+    for (res) |w| {
+        assert trie.contains(t, w)
+        assert w.starts_with("wort")
+    }
+}
+
+test "all autocomplete results for common prefixes are valid words" {
+    let t = load_full_trie()
+    let prefixes = [
+        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
+        "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
+        "u", "v", "w", "x", "y", "z", "th", "he", "in", "er",
+        "an", "re", "hand", "hands", "handsome", "hel", "the", "cat", "run", "walk",
+        "beau", "quick", "ther", "there", "wh", "qu", "str", "pre",
+    ]
+    for (prefixes) |p| {
+        let res = trie.autocomplete(t, p, 200)
+        for (res) |w| {
+            assert w.len() > 0
+            assert trie.contains(t, w)
+        }
+    }
+}
+
+test "from_bytes rejects truncated data" {
+    let tiny: Array[I32] = Array[I32].new(10, 0)
+    let bad = trie.from_bytes(tiny)
+    let is_null = promote bad {
+        |t| => false,
+        ~> true,
+    }
+    assert is_null
+}

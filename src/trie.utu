@@ -1,0 +1,635 @@
+using Buffer from std:Buffer
+
+mod trie {
+    struct Trie:
+        | children_masks: Array[I32]
+        | terminators_masks: Array[I32]
+        | checkpoints: Array[I32]
+        | level_basis: Array[I32]
+        | node_count: I32
+
+    struct NavLoc:
+        | node_idx: I32
+        | level: I32
+        | tokens_used: I32
+
+    struct NavResult:
+        | primary: ?NavLoc
+        | alt: ?NavLoc
+
+    struct StackFrame:
+        | node_idx: I32
+        | level: I32
+        | token_depth: I32
+        | token: I32
+
+    // Super letter pairs (tokens 26..31): th, he, in, er, an, re
+    fn match_super_pair(c0: I32, c1: I32) I32 {
+        if c0 == 116 and c1 == 104 {
+            return 26
+        }
+        if c0 == 104 and c1 == 101 {
+            return 27
+        }
+        if c0 == 105 and c1 == 110 {
+            return 28
+        }
+        if c0 == 101 and c1 == 114 {
+            return 29
+        }
+        if c0 == 97 and c1 == 110 {
+            return 30
+        }
+        if c0 == 114 and c1 == 101 {
+            return 31
+        }
+        return -1
+    }
+
+    fn super_pair_first(tok: I32) I32 {
+        if tok == 26 {
+            return 116
+        } // t
+        if tok == 27 {
+            return 104
+        } // h
+        if tok == 28 {
+            return 105
+        } // i
+        if tok == 29 {
+            return 101
+        } // e
+        if tok == 30 {
+            return 97
+        } // a
+        return 114 // r
+    }
+
+    fn super_pair_second(tok: I32) I32 {
+        if tok == 26 {
+            return 104
+        } // h
+        if tok == 27 {
+            return 101
+        } // e
+        if tok == 28 {
+            return 110
+        } // n
+        if tok == 29 {
+            return 114
+        } // r
+        if tok == 30 {
+            return 110
+        } // n
+        return 101 // e
+    }
+
+    fn starts_super_pair(ch: I32) Bool {
+        return ch == 116 or ch == 104 or ch == 105 or ch == 101 or ch == 97 or ch == 114
+    }
+
+    // Terminator-only suffix tokens (26..31): ess, ion, ous, ly, ic, al
+    fn match_suffix3(c0: I32, c1: I32, c2: I32) I32 {
+        if c0 == 101 and c1 == 115 and c2 == 115 {
+            return 26
+        }
+        if c0 == 105 and c1 == 111 and c2 == 110 {
+            return 27
+        }
+        if c0 == 111 and c1 == 117 and c2 == 115 {
+            return 28
+        }
+        return -1
+    }
+
+    fn match_suffix2(c0: I32, c1: I32) I32 {
+        if c0 == 108 and c1 == 121 {
+            return 29
+        }
+        if c0 == 105 and c1 == 99 {
+            return 30
+        }
+        if c0 == 97 and c1 == 108 {
+            return 31
+        }
+        return -1
+    }
+
+    fn read_u32_le(data: Array[I32], off: I32) I32 {
+        return (data[off] & 255)
+        | ((data[off + 1] & 255) << 8)
+        | ((data[off + 2] & 255) << 16)
+        | ((data[off + 3] & 255) << 24)
+    }
+
+    fn read_mask(data: Array[I32], off: I32, len: I32) I32 {
+        let v = 0
+        let i = 0
+        while (i < len) {
+            v = v | ((data[off + i] & 255) << (i * 8))
+            i += 1
+        }
+        return v
+    }
+
+    /// Decode a serialized trie_data.bin byte array into a Trie.
+    fn from_bytes(data: Array[I32]) ?Trie {
+        let header_size = 208
+        if data.len() < header_size {
+            return null
+        }
+
+        let node_count = read_u32_le(data, 0)
+        let checkpoint_count = read_u32_le(data, 4)
+        if node_count <= 0 or checkpoint_count <= 0 {
+            return null
+        }
+
+        let level_basis: Array[I32] = Array[I32].new(50, 0)
+        for (0 ..< 50) |i| {
+            level_basis[i] = read_u32_le(data, 8 + i * 4)
+        }
+
+        let children_masks: Array[I32] = Array[I32].new(node_count, 0)
+        let terminators_masks: Array[I32] = Array[I32].new(node_count, 0)
+        let checkpoints: Array[I32] = Array[I32].new(checkpoint_count, 0)
+
+        let checkpoints_bytes = checkpoint_count * 4
+        if data.len() < header_size + checkpoints_bytes {
+            return null
+        }
+        let nodes_end = data.len() - checkpoints_bytes
+
+        let fixed_total = header_size + node_count * 8 + checkpoints_bytes
+        if data.len() == fixed_total {
+            let off = header_size
+            let i = 0
+            while (i < node_count) {
+                children_masks[i] = read_u32_le(data, off)
+                terminators_masks[i] = read_u32_le(data, off + 4)
+                off += 8
+                i += 1
+            }
+        } else {
+            let off = header_size
+            let i = 0
+            while (i < node_count) {
+                if off >= nodes_end {
+                    return null
+                }
+                let len_byte = data[off] & 255
+                off += 1
+                let c_len = (len_byte & 3) + 1
+                let t_len = ((len_byte >>> 2) & 3) + 1
+                if off + c_len + t_len > nodes_end {
+                    return null
+                }
+                children_masks[i] = read_mask(data, off, c_len)
+                off += c_len
+                terminators_masks[i] = read_mask(data, off, t_len)
+                off += t_len
+                i += 1
+            }
+            if off != nodes_end {
+                return null
+            }
+        }
+
+        let cp_off = nodes_end
+        let c = 0
+        while (c < checkpoint_count) {
+            checkpoints[c] = read_u32_le(data, cp_off)
+            cp_off += 4
+            c += 1
+        }
+
+        return Trie {
+            children_masks: children_masks,
+            terminators_masks: terminators_masks,
+            checkpoints: checkpoints,
+            level_basis: level_basis,
+            node_count: node_count,
+        }
+    }
+
+    fn normalize(s: Str) Str {
+        let n = s.len()
+        if n == 0 {
+            return ""
+        }
+        let out: Array[I32] = Array[I32].new(n, 0)
+        let count = 0
+        let i = 0
+        while (i < n) {
+            let c = s[i]
+            if c >= 65 and c <= 90 {
+                out[count] = c + 32
+                count += 1
+            } else if c >= 97 and c <= 122 {
+                out[count] = c
+                count += 1
+            }
+            i += 1
+        }
+        return Str.from_codes(out, count)
+    }
+
+    fn tokenize(word: Str, end_len: I32, out_buf: Array[I32]) I32 {
+        let i = 0
+        let out_idx = 0
+        let cap = out_buf.len()
+        while (i < end_len and out_idx < cap) {
+            let tok = -1
+            if i + 1 < end_len {
+                tok = match_super_pair(word[i], word[i + 1])
+                if tok >= 0 {
+                    out_buf[out_idx] = tok
+                    out_idx += 1
+                    i += 2
+                }
+            }
+            if tok < 0 {
+                let c = word[i]
+                if c >= 97 and c <= 122 {
+                    out_buf[out_idx] = c - 97
+                    out_idx += 1
+                }
+                i += 1
+            }
+        }
+        return out_idx
+    }
+
+    fn untokenize(tokens: Array[I32], tok_len: I32, out_buf: Array[I32]) I32 {
+        let out_idx = 0
+        let i = 0
+        while (i < tok_len) {
+            let t = tokens[i]
+            if t < 26 {
+                out_buf[out_idx] = 97 + t
+                out_idx += 1
+            } else {
+                out_buf[out_idx] = super_pair_first(t)
+                out_buf[out_idx + 1] = super_pair_second(t)
+                out_idx += 2
+            }
+            i += 1
+        }
+        return out_idx
+    }
+
+    fn append_terminator(out_buf: Array[I32], out_idx: I32, tok: I32) I32 {
+        let cap = out_buf.len()
+        if tok < 26 {
+            if out_idx + 1 > cap {
+                return -1
+            }
+            out_buf[out_idx] = 97 + tok
+            return out_idx + 1
+        }
+        if tok == 26 { // ess
+            if out_idx + 3 > cap {
+                return -1
+            }
+            out_buf[out_idx] = 101
+            out_buf[out_idx + 1] = 115
+            out_buf[out_idx + 2] = 115
+            return out_idx + 3
+        }
+        if tok == 27 { // ion
+            if out_idx + 3 > cap {
+                return -1
+            }
+            out_buf[out_idx] = 105
+            out_buf[out_idx + 1] = 111
+            out_buf[out_idx + 2] = 110
+            return out_idx + 3
+        }
+        if tok == 28 { // ous
+            if out_idx + 3 > cap {
+                return -1
+            }
+            out_buf[out_idx] = 111
+            out_buf[out_idx + 1] = 117
+            out_buf[out_idx + 2] = 115
+            return out_idx + 3
+        }
+        if tok == 29 { // ly
+            if out_idx + 2 > cap {
+                return -1
+            }
+            out_buf[out_idx] = 108
+            out_buf[out_idx + 1] = 121
+            return out_idx + 2
+        }
+        if tok == 30 { // ic
+            if out_idx + 2 > cap {
+                return -1
+            }
+            out_buf[out_idx] = 105
+            out_buf[out_idx + 1] = 99
+            return out_idx + 2
+        }
+        // 31: al
+        if out_idx + 2 > cap {
+            return -1
+        }
+        out_buf[out_idx] = 97
+        out_buf[out_idx + 1] = 108
+        return out_idx + 2
+    }
+
+    fn cum_children(t: Trie, idx: I32) I32 {
+        let cp_idx = idx >>> 5
+        let total = t.checkpoints[cp_idx]
+        let i = cp_idx << 5
+        while (i < idx) {
+            total += I32.popcnt(t.children_masks[i])
+            i += 1
+        }
+        return total
+    }
+
+    fn children_offset(t: Trie, node_idx: I32, level: I32) I32 {
+        return cum_children(t, node_idx) - cum_children(t, t.level_basis[level])
+    }
+
+    fn step_child(t: Trie, node_idx: I32, level: I32, tok: I32) I32 {
+        let mask = 1 << tok
+        let mask_below = mask - 1
+        let rank = I32.popcnt(t.children_masks[node_idx] & mask_below)
+        return t.level_basis[level + 1] + children_offset(t, node_idx, level) + rank
+    }
+
+    /// Check if a word exists in the dictionary (case-insensitive, alpha-only).
+    fn contains(t: Trie, raw_word: Str) Bool {
+        let word = normalize(raw_word)
+        let n = word.len()
+        if n == 0 {
+            return false
+        }
+
+        let term_token = -1
+        let prefix_len = n - 1
+        if n >= 3 {
+            let s3 = match_suffix3(word[n - 3], word[n - 2], word[n - 1])
+            if s3 >= 0 {
+                term_token = s3
+                prefix_len = n - 3
+            }
+        }
+        if term_token < 0 and n >= 2 {
+            let s2 = match_suffix2(word[n - 2], word[n - 1])
+            if s2 >= 0 {
+                term_token = s2
+                prefix_len = n - 2
+            }
+        }
+        if term_token < 0 {
+            term_token = word[n - 1] - 97
+        }
+
+        let token_buf: Array[I32] = Array[I32].new(128, 0)
+        let tok_len = tokenize(word, prefix_len, token_buf)
+
+        let cur_idx = 0
+        let cur_level = 0
+        let i = 0
+        while (i < tok_len) {
+            let tok = token_buf[i]
+            let mask = 1 << tok
+            if (t.children_masks[cur_idx] & mask) == 0 {
+                return false
+            }
+            cur_idx = step_child(t, cur_idx, cur_level, tok)
+            cur_level += 1
+            i += 1
+        }
+
+        return (t.terminators_masks[cur_idx] & (1 << term_token)) != 0
+    }
+
+    fn navigate_to_prefix(t: Trie, prefix: Str, token_buf: Array[I32], tok_len: I32) NavResult {
+        if tok_len == 0 {
+            return NavResult {
+                primary: NavLoc {
+                    node_idx: 0,
+                    level: 0,
+                    tokens_used: 0
+                },
+                alt: null,
+            }
+        }
+
+        let cur_idx = 0
+        let cur_level = 0
+        let i = 0
+        while (i < tok_len) {
+            let tok = token_buf[i]
+            let is_last = i == tok_len - 1
+            let mask = 1 << tok
+
+            if is_last {
+                let alt_loc: ?NavLoc = if tok < 26 and starts_super_pair(97 + tok) {
+                    NavLoc {
+                        node_idx: cur_idx,
+                        level: cur_level,
+                        tokens_used: i
+                    }
+                } else {
+                    null
+                }
+
+                if (t.children_masks[cur_idx] & mask) != 0 {
+                    let next_idx = step_child(t, cur_idx, cur_level, tok)
+                    return NavResult {
+                        primary: NavLoc {
+                            node_idx: next_idx,
+                            level: cur_level + 1,
+                            tokens_used: i + 1
+                        },
+                        alt: alt_loc,
+                    }
+                }
+
+                return NavResult {
+                    primary: null,
+                    alt: alt_loc
+                }
+            }
+
+            if (t.children_masks[cur_idx] & mask) == 0 {
+                return NavResult {
+                    primary: null,
+                    alt: null
+                }
+            }
+
+            cur_idx = step_child(t, cur_idx, cur_level, tok)
+            cur_level += 1
+            i += 1
+        }
+
+        return NavResult {
+            primary: NavLoc {
+                node_idx: 0,
+                level: 0,
+                tokens_used: 0
+            },
+            alt: null,
+        }
+    }
+
+    fn child_matches_dangling(dangling_tok: I32, child_tok: I32) Bool {
+        let ch = 97 + dangling_tok
+        if child_tok < 26 {
+            return 97 + child_tok == ch
+        }
+        return super_pair_first(child_tok) == ch
+    }
+
+    fn collect_from_nav(
+        t: Trie,
+        prefix: Str,
+        nav: NavLoc,
+        is_backtrack: Bool,
+        token_buf: Array[I32],
+        full_tok_len: I32,
+        results: Buffer[Str],
+        max_results: I32
+    ) Void {
+        let base_depth = nav.tokens_used
+        if base_depth > full_tok_len {
+            return
+        }
+
+        let dangling_tok = if is_backtrack and base_depth < full_tok_len {
+            token_buf[base_depth]
+        } else {
+            0
+        }
+
+        let stack = Buffer[StackFrame].new()
+        stack.push(StackFrame {
+            node_idx: nav.node_idx,
+            level: nav.level,
+            token_depth: base_depth,
+            token: 0,
+        })
+
+        let tmp: Array[I32] = Array[I32].new(128, 0)
+        let children_to_add: Array[I32] = Array[I32].new(32, 0)
+
+        while (stack.len() > 0 and results.len() < max_results) {
+            let cur = stack.pop()
+
+            if cur.token_depth > base_depth {
+                token_buf[cur.token_depth - 1] = cur.token
+            }
+
+            let c_mask_full = t.children_masks[cur.node_idx]
+            let t_mask = t.terminators_masks[cur.node_idx]
+
+            if not (is_backtrack and cur.token_depth == base_depth) {
+                while (t_mask != 0 and results.len() < max_results) {
+                    let bit = I32.ctz(t_mask)
+                    t_mask = t_mask & (t_mask - 1)
+
+                    let out_idx = untokenize(token_buf, cur.token_depth, tmp)
+                    let final_len = append_terminator(tmp, out_idx, bit)
+                    if final_len < 0 {
+                        continue
+                    }
+
+                    let cand = Str.from_codes(tmp, final_len)
+                    if not cand.starts_with(prefix) {
+                        continue
+                    }
+
+                    let dup = false
+                    let j = 0
+                    let rlen = results.len()
+                    while (j < rlen) {
+                        if results[j] == cand {
+                            dup = true
+                            break
+                        }
+                        j += 1
+                    }
+                    if not dup {
+                        results.push(cand)
+                    }
+                }
+            }
+
+            let c_mask = c_mask_full
+            let child_count = 0
+            while (c_mask != 0) {
+                let bit = I32.ctz(c_mask)
+                c_mask = c_mask & (c_mask - 1)
+                children_to_add[child_count] = bit
+                child_count += 1
+            }
+
+            let offset_base = if child_count > 0 {
+                children_offset(t, cur.node_idx, cur.level)
+            } else {
+                0
+            }
+            let next_level_start = t.level_basis[cur.level + 1]
+
+            let ci = child_count
+            while (ci > 0) {
+                ci -= 1
+                let bit = children_to_add[ci]
+                if cur.token_depth >= 127 {
+                    continue
+                }
+
+                if is_backtrack and cur.token_depth == base_depth {
+                    if not child_matches_dangling(dangling_tok, bit) {
+                        continue
+                    }
+                }
+
+                let mask_below = (1 << bit) - 1
+                let rank = I32.popcnt(c_mask_full & mask_below)
+                let child_idx = next_level_start + offset_base + rank
+
+                stack.push(StackFrame {
+                    node_idx: child_idx,
+                    level: cur.level + 1,
+                    token_depth: cur.token_depth + 1,
+                    token: bit,
+                })
+            }
+        }
+    }
+
+    /// Return up to max_results word completions for prefix.
+    fn autocomplete(t: Trie, raw_prefix: Str, max_results: I32) Array[Str] {
+        let prefix = normalize(raw_prefix)
+        if prefix.len() == 0 or max_results <= 0 {
+            return []
+        }
+
+        let token_buf: Array[I32] = Array[I32].new(128, 0)
+        let full_tok_len = tokenize(prefix, prefix.len(), token_buf)
+        let navs = navigate_to_prefix(t, prefix, token_buf, full_tok_len)
+
+        let results = Buffer[Str].new()
+        promote navs.primary {
+            |nav| => collect_from_nav(t, prefix, nav, false, token_buf, full_tok_len, results, max_results),
+            ~> {},
+        }
+        if results.len() < max_results {
+            // Re-tokenize since primary pass may have mutated token_buf past base_depth
+            let re_len = tokenize(prefix, prefix.len(), token_buf)
+            promote navs.alt {
+                |nav| => collect_from_nav(t, prefix, nav, true, token_buf, re_len, results, max_results),
+                ~> {},
+            }
+        }
+        return results.finish()
+    }
+}
