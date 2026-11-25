@@ -66,7 +66,7 @@ test "from_bytes rejects truncated data" {
     let tiny: Array[I32] = Array[I32].new(10, 0)
     let bad = trie.from_bytes(tiny)
     let is_null = promote bad {
-        |t| => false,
+        |_| => false,
         ~> true,
     }
     assert is_null
