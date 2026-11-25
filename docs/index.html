@@ -1,43 +1,44 @@
 <!DOCTYPE html>
+<html lang="en" itemscope itemtype="https://schema.org/WebSite">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>English Trie</title>
+		<meta name="description" content="Interactive English word trie visualization">
+		<meta name="theme-color" content="#000000">
+		<!-- og -->
 
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>English Trie</title>
-  <meta name="description" content="Interactive English word trie visualization">
-  <meta name="theme-color" content="#000000">
-  <!-- og -->
+		<!-- Google / Search Engine Tags -->
+		<meta itemprop="name" content="English Trie">
+		<meta itemprop="description" content="Interactive English word trie visualization">
+		<meta itemprop="image" content="https://robertmorelli.github.io/english/preview.png">
 
-  <!-- Google / Search Engine Tags -->
-  <meta itemprop="name" content="English Trie" />
-  <meta itemprop="description" content="Interactive English word trie visualization" />
-  <meta itemprop="image" content="https://robertmorelli.github.io/english/preview.png" />
+		<!-- Facebook Meta Tags -->
+		<meta property="og:url" content="https://robertmorelli.github.io/english/">
+		<meta property="og:type" content="website">
+		<meta property="og:title" content="English Trie">
+		<meta property="og:description" content="Interactive English word trie visualization">
+		<meta property="og:image" content="https://robertmorelli.github.io/english/preview.png">
 
-  <!-- Facebook Meta Tags -->
-  <meta property="og:url" content="https://robertmorelli.github.io/english/">
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="English Trie">
-  <meta property="og:description" content="Interactive English word trie visualization">
-  <meta property="og:image" content="https://robertmorelli.github.io/english/preview.png">
+		<!-- Twitter Meta Tags -->
+		<meta name="twitter:card" content="summary_large_image">
+		<meta property="twitter:domain" content="robertmorelli.github.io">
+		<meta property="twitter:url" content="https://robertmorelli.github.io/english/">
+		<meta name="twitter:title" content="English Trie">
+		<meta name="twitter:description" content="Interactive English word trie visualization">
+		<meta name="twitter:image" content="https://robertmorelli.github.io/english/preview.png">
 
-  <!-- Twitter Meta Tags -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta property="twitter:domain" content="robertmorelli.github.io">
-  <meta property="twitter:url" content="https://robertmorelli.github.io/english/">
-  <meta name="twitter:title" content="English Trie">
-  <meta name="twitter:description" content="Interactive English word trie visualization">
-  <meta name="twitter:image" content="https://robertmorelli.github.io/english/preview.png">
+		<!-- resources -->
+		<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+		<link href="./style.css" rel="stylesheet">
+		<script src="./script.js" type="module"></script>
+	</head>
 
-  <!-- resources -->
-  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-  <link href="./style.css" rel="stylesheet">
-  <script src="./script.js" type="module"></script>
-</head>
-
-<body>
-  <button id="download" type="button">↓</button>
-  <form id="search-box">
-    <input id="search" type="text" disabled>
-    <input type="reset" value="x">
-  </form>
-</body>
+	<body>
+		<button id="download" type="button" aria-label="Download">↓</button>
+		<form id="search-box">
+			<input id="search" type="text" disabled aria-label="Search">
+			<input type="reset" value="x" aria-label="Clear search">
+		</form>
+	</body>
+</html>
