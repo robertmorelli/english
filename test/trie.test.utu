@@ -1,8 +1,9 @@
+using Bytes from std:Bytes
 using Fs from "node:fs"
 using trie from "../src/trie.utu"
 
 fn load_full_trie() trie.Trie {
-    return promote trie.from_u8(Fs.readFileSync("docs/trie_data.bin")) {
+    return promote trie.from_bytes(Bytes.from_js(Fs.readFileSync("docs/trie_data.bin"))) {
         |t| => t,
         ~> {
             fatal

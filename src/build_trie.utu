@@ -1,34 +1,34 @@
 using Buffer from std:Buffer
+using Bytes from std:Bytes
 using console from std:Console
 using Fs from "node:fs"
-using JS from std:JS
 using trie from "./trie.utu"
 
 // Builds the packed level-order English dictionary trie from /usr/share/dict/words.
 // Run with: utu src/build_trie.utu
 
 struct ByteWriter:
-    | buf: JS.Uint8Array
+    | buf: Array[I32]
     | pos: I32
 
 fn new_writer(size: I32) ByteWriter {
     return ByteWriter {
-        buf: new JS.Uint8Array(size.f64()),
+        buf: Array[I32].new(size, 0),
         pos: 0,
     }
 }
 
 fn write_u8(w: ByteWriter, b: I32) Void {
-    w.buf[w.pos.f64()] = (b & 255).f64()
+    w.buf[w.pos] = b & 255
     w.pos += 1
 }
 
 fn write_u32_le(w: ByteWriter, v: I32) Void {
     let p = w.pos
-    w.buf[p.f64()] = (v & 255).f64()
-    w.buf[(p + 1).f64()] = ((v >>> 8) & 255).f64()
-    w.buf[(p + 2).f64()] = ((v >>> 16) & 255).f64()
-    w.buf[(p + 3).f64()] = ((v >>> 24) & 255).f64()
+    w.buf[p] = v & 255
+    w.buf[p + 1] = (v >>> 8) & 255
+    w.buf[p + 2] = (v >>> 16) & 255
+    w.buf[p + 3] = (v >>> 24) & 255
     w.pos = p + 4
 }
 
@@ -268,7 +268,7 @@ main {
         i += 1
     }
 
-    let out = w.buf.subarray(0.0, w.pos.f64())
+    let out = Bytes.to_js(w.buf.slice(0, w.pos))
     Fs.writeFileSync(output_file, out)
     console.log("Wrote " + w.pos.str() + " bytes to " + output_file)
 }

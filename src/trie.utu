@@ -1,5 +1,4 @@
 using Buffer from std:Buffer
-using JS from std:JS
 
 mod trie {
     struct Trie:
@@ -131,18 +130,6 @@ mod trie {
             i += 1
         }
         return v
-    }
-
-    /// Decode a JS/Node Uint8Array into a Trie.
-    fn from_u8(u8: JS.Uint8Array) ?Trie {
-        let n = u8.length.i32()
-        let bytes: Array[I32] = Array[I32].new(n, 0)
-        let i = 0
-        while (i < n) {
-            bytes[i] = u8[i.f64()].i32()
-            i += 1
-        }
-        return from_bytes(bytes)
     }
 
     /// Decode a serialized trie_data.bin byte array into a Trie.
