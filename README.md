@@ -1,6 +1,8 @@
-# english (utu)
+# english
 
-space-optimized trie containing the macOS English dictionary (~234k words) in 2.15 MB, written entirely in [utu](https://github.com/robertmorelli/utu) and Wutu (trie builder, query engine, tests, and web demo).
+space-optimized trie containing the macOS English dictionary (~234k words) in 2.15 MB, written in [utu](https://github.com/robertmorelli/utu) and Wutu.
+
+[live demo](https://robertmorelli.github.io/english/)
 
 ## compression
 
@@ -21,3 +23,5 @@ space-optimized trie containing the macOS English dictionary (~234k words) in 2.
 make          # build docs/trie_data.bin and compile web demo into docs/
 make test     # run utu test suite
 ```
+
+*(the earlier standalone Zig WASM + JS bindings version is preserved on the `zig` branch)*
