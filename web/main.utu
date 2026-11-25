@@ -21,6 +21,7 @@ fn update_results() Void {
 }
 
 html {
+    lang = "en"
     @document {
         @supports (width: calc(sibling-index() * 1px)) and (width: calc(sibling-count() * 1px)) {
             body {
