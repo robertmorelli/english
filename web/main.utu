@@ -20,15 +20,7 @@ fn load_trie(url: Str, on_loaded: cl() Void) Void {
             return
         }
         let _p2 = res.arrayBuffer().then(cl(buf) Void {
-            let u8 = new Browser.Uint8Array(buf)
-            let n = u8.length.i32()
-            let bytes: Array[I32] = Array[I32].new(n, 0)
-            let i = 0
-            while (i < n) {
-                bytes[i] = u8[i.f64()].i32()
-                i += 1
-            }
-            state.data = trie.from_bytes(bytes)
+            state.data = trie.from_u8(new Browser.Uint8Array(buf))
             on_loaded()
         })
     })

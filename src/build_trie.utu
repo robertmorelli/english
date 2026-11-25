@@ -2,6 +2,7 @@ using Buffer from std:Buffer
 using console from std:Console
 using Fs from "node:fs"
 using JS from std:JS
+using trie from "./trie.utu"
 
 // Builds the packed level-order English dictionary trie from /usr/share/dict/words.
 // Run with: utu src/build_trie.utu
@@ -44,56 +45,6 @@ fn new_node() BuildNode {
     }
 }
 
-// Super letter pairs (tokens 26..31): th, he, in, er, an, re
-fn match_super_pair(c0: I32, c1: I32) I32 {
-    if c0 == 116 and c1 == 104 {
-        return 26
-    } // th
-    if c0 == 104 and c1 == 101 {
-        return 27
-    } // he
-    if c0 == 105 and c1 == 110 {
-        return 28
-    } // in
-    if c0 == 101 and c1 == 114 {
-        return 29
-    } // er
-    if c0 == 97 and c1 == 110 {
-        return 30
-    } // an
-    if c0 == 114 and c1 == 101 {
-        return 31
-    } // re
-    return -1
-}
-
-// Terminator-only suffix tokens (26..31): ess, ion, ous, ly, ic, al
-fn match_suffix3(c0: I32, c1: I32, c2: I32) I32 {
-    if c0 == 101 and c1 == 115 and c2 == 115 {
-        return 26
-    } // ess
-    if c0 == 105 and c1 == 111 and c2 == 110 {
-        return 27
-    } // ion
-    if c0 == 111 and c1 == 117 and c2 == 115 {
-        return 28
-    } // ous
-    return -1
-}
-
-fn match_suffix2(c0: I32, c1: I32) I32 {
-    if c0 == 108 and c1 == 121 {
-        return 29
-    } // ly
-    if c0 == 105 and c1 == 99 {
-        return 30
-    } // ic
-    if c0 == 97 and c1 == 108 {
-        return 31
-    } // al
-    return -1
-}
-
 fn mask_byte_len(mask: I32) I32 {
     if mask == 0 {
         return 1
@@ -121,14 +72,14 @@ fn add_word(root: BuildNode, word: Str) Void {
     let prefix_len = n - 1
 
     if n >= 3 {
-        let s3 = match_suffix3(word[n - 3], word[n - 2], word[n - 1])
+        let s3 = trie.match_suffix3(word[n - 3], word[n - 2], word[n - 1])
         if s3 >= 0 {
             term_token = s3
             prefix_len = n - 3
         }
     }
     if term_token < 0 and n >= 2 {
-        let s2 = match_suffix2(word[n - 2], word[n - 1])
+        let s2 = trie.match_suffix2(word[n - 2], word[n - 1])
         if s2 >= 0 {
             term_token = s2
             prefix_len = n - 2
@@ -144,7 +95,7 @@ fn add_word(root: BuildNode, word: Str) Void {
     while (i < prefix_len) {
         let tok = -1
         if i + 1 < prefix_len {
-            tok = match_super_pair(word[i], word[i + 1])
+            tok = trie.match_super_pair(word[i], word[i + 1])
             if tok >= 0 {
                 i += 2
             }
