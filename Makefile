@@ -7,10 +7,9 @@ trie:
 
 web:
 	utu build web/main.utu -o docs
-	rm -f docs/sizes.json
 
 test:
 	utu test test/trie.test.utu
 
 clean:
-	rm -f docs/index.html docs/app.js docs/app.wasm docs/trie_data.bin
+	rm -f docs/index.html docs/app.js docs/app.wasm

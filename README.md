@@ -12,15 +12,15 @@ space-optimized trie containing the macOS English dictionary (~234k words) in 2.
 
 ## layout
 
-- `src/trie.utu` — compressed trie decoder, `contains`, and `autocomplete`
-- `src/build_trie.utu` — level-order BFS trie builder (`/usr/share/dict/words` -> `docs/trie_data.bin`)
-- `web/main.utu` — interactive Wutu web demo
+- `src/trie.utu` — compressed trie decoder (`@embed`), `contains`, and `autocomplete`
+- `src/build_trie.utu` — level-order BFS trie builder (`/usr/share/dict/words` -> `src/trie_data.bin`)
+- `web/main.utu` — interactive Wutu web demo (embeds trie directly into `docs/app.wasm`)
 - `test/trie.test.utu` — `utu test` suite
 
 ## build
 
 ```sh
-make          # build docs/trie_data.bin and compile web demo into docs/
+make          # build src/trie_data.bin and compile self-contained web demo into docs/
 make test     # run utu test suite
 ```
 

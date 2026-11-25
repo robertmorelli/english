@@ -2,4 +2,3 @@
 .mypy_cache/
 .claude/
 .vscode/
-node_modules/

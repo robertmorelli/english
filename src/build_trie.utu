@@ -1,6 +1,6 @@
 using Buffer from std:Buffer
 using Bytes from std:Bytes
-using console from std:Console
+using console from std:console
 using Fs from "node:fs"
 using trie from "./trie.utu"
 
@@ -12,10 +12,7 @@ struct ByteWriter:
     | pos: I32
 
 fn new_writer(size: I32) ByteWriter {
-    return ByteWriter {
-        buf: Array[I32].new(size, 0),
-        pos: 0,
-    }
+    return ByteWriter { buf: Array[I32].new(size, 0), pos: 0 }
 }
 
 fn write_u8(w: ByteWriter, b: I32) Void {
@@ -38,11 +35,7 @@ struct BuildNode:
     | children: ?Array[?BuildNode]
 
 fn new_node() BuildNode {
-    return BuildNode {
-        children_mask: 0,
-        terminators_mask: 0,
-        children: null,
-    }
+    return BuildNode { children_mask: 0, terminators_mask: 0, children: null }
 }
 
 fn mask_byte_len(mask: I32) I32 {
@@ -51,13 +44,13 @@ fn mask_byte_len(mask: I32) I32 {
     }
     if (mask & -16777216) != 0 {
         return 4
-    } // 0xFF000000
+    }
     if (mask & 16711680) != 0 {
         return 3
-    } // 0x00FF0000
+    }
     if (mask & 65280) != 0 {
         return 2
-    } // 0x0000FF00
+    }
     return 1
 }
 
@@ -67,7 +60,6 @@ fn add_word(root: BuildNode, word: Str) Void {
         return
     }
 
-    // Determine terminator token (longest suffix match)
     let term_token = -1
     let prefix_len = n - 1
 
@@ -86,10 +78,9 @@ fn add_word(root: BuildNode, word: Str) Void {
         }
     }
     if term_token < 0 {
-        term_token = word[n - 1] - 97
+        term_token = word[n - 1] - 'a'
     }
 
-    // Tokenize prefix and walk/insert into trie
     let cur = root
     let i = 0
     while (i < prefix_len) {
@@ -103,8 +94,8 @@ fn add_word(root: BuildNode, word: Str) Void {
         if tok < 0 {
             let c = word[i]
             i += 1
-            if c >= 97 and c <= 122 {
-                tok = c - 97
+            if c >= 'a' and c <= 'z' {
+                tok = c - 'a'
             } else {
                 continue
             }
@@ -143,7 +134,7 @@ fn is_lower_alpha(s: Str) Bool {
     let i = 0
     while (i < n) {
         let c = s[i]
-        if c < 97 or c > 122 {
+        if c < 'a' or c > 'z' {
             return false
         }
         i += 1
@@ -153,7 +144,7 @@ fn is_lower_alpha(s: Str) Bool {
 
 main {
     let words_file = "/usr/share/dict/words"
-    let output_file = "docs/trie_data.bin"
+    let output_file = "src/trie_data.bin"
 
     console.log("Reading words from " + words_file + "...")
     let text = Fs.readFileSync(words_file, "utf8")
@@ -165,11 +156,10 @@ main {
     let pos = 0
 
     while (pos <= len) {
-        let at_end = pos == len
-        let is_nl = if at_end {
+        let is_nl = if pos == len {
             true
         } else {
-            text[pos] == 10 or text[pos] == 13
+            text[pos] == '\n' or text[pos] == '\r'
         }
         if is_nl {
             if pos > start {
@@ -222,18 +212,15 @@ main {
     let checkpoint_count = (node_count / 32) + 1
     console.log("Trie built: " + node_count.str() + " nodes, " + checkpoint_count.str() + " checkpoints")
 
-    // Exact upper bound: 208 header + 9 bytes/node max + 4 bytes/checkpoint
     let max_bytes = 208 + node_count * 9 + checkpoint_count * 4
     let w = new_writer(max_bytes)
 
-    // Header
     write_u32_le(w, node_count)
     write_u32_le(w, checkpoint_count)
     for (0 ..< 50) |i| {
         write_u32_le(w, level_basis[i])
     }
 
-    // Packed nodes
     let i = 0
     while (i < node_count) {
         let node = all_nodes[i]
@@ -241,8 +228,7 @@ main {
         let t_mask = node.terminators_mask
         let c_len = mask_byte_len(c_mask)
         let t_len = mask_byte_len(t_mask)
-        let length_byte = ((t_len - 1) << 2) | (c_len - 1)
-        write_u8(w, length_byte)
+        write_u8(w, ((t_len - 1) << 2) | (c_len - 1))
 
         let b = 0
         while (b < c_len) {
@@ -257,7 +243,6 @@ main {
         i += 1
     }
 
-    // Checkpoints
     let running = 0
     i = 0
     while (i < node_count) {
@@ -268,7 +253,6 @@ main {
         i += 1
     }
 
-    let out = Bytes.to_js(w.buf.slice(0, w.pos))
-    Fs.writeFileSync(output_file, out)
+    Fs.writeFileSync(output_file, Bytes.to_js(w.buf.slice(0, w.pos)))
     console.log("Wrote " + w.pos.str() + " bytes to " + output_file)
 }

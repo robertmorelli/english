@@ -1,18 +1,7 @@
-using Bytes from std:Bytes
-using Fs from "node:fs"
 using trie from "../src/trie.utu"
 
-fn load_full_trie() trie.Trie {
-    return promote trie.from_bytes(Bytes.from_js(Fs.readFileSync("docs/trie_data.bin"))) {
-        |t| => t,
-        ~> {
-            fatal
-        },
-    }
-}
-
 test "contains common words and rejects non-words" {
-    let t = load_full_trie()
+    let t = trie.load()
     assert t.node_count > 400000
     assert trie.contains(t, "hello")
     assert trie.contains(t, "world")
@@ -24,7 +13,7 @@ test "contains common words and rejects non-words" {
 }
 
 test "autocomplete returns valid words" {
-    let t = load_full_trie()
+    let t = trie.load()
     let r = trie.autocomplete(t, "hel", 10)
     assert r.len() > 0
     for (r) |w| {
@@ -34,7 +23,7 @@ test "autocomplete returns valid words" {
 }
 
 test "handsome autocomplete has no invalid variants" {
-    let t = load_full_trie()
+    let t = trie.load()
     let res = trie.autocomplete(t, "handsome", 50)
     for (res) |w| {
         assert w.len() > 0
@@ -46,7 +35,7 @@ test "handsome autocomplete has no invalid variants" {
 }
 
 test "backtrack on bigrams" {
-    let t = load_full_trie()
+    let t = trie.load()
     let res = trie.autocomplete(t, "wort", 50)
     assert res.len() > 0
     for (res) |w| {
@@ -56,7 +45,7 @@ test "backtrack on bigrams" {
 }
 
 test "all autocomplete results for common prefixes are valid words" {
-    let t = load_full_trie()
+    let t = trie.load()
     let prefixes = [
         "a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
         "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",

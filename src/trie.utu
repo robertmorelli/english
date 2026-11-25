@@ -1,5 +1,7 @@
 using Buffer from std:Buffer
 
+const mem embedded: U8 = @embed/\ trie_data.bin \/
+
 mod trie {
     struct Trie:
         | children_masks: Array[I32]
@@ -25,22 +27,22 @@ mod trie {
 
     // Super letter pairs (tokens 26..31): th, he, in, er, an, re
     fn match_super_pair(c0: I32, c1: I32) I32 {
-        if c0 == 116 and c1 == 104 {
+        if c0 == 't' and c1 == 'h' {
             return 26
         }
-        if c0 == 104 and c1 == 101 {
+        if c0 == 'h' and c1 == 'e' {
             return 27
         }
-        if c0 == 105 and c1 == 110 {
+        if c0 == 'i' and c1 == 'n' {
             return 28
         }
-        if c0 == 101 and c1 == 114 {
+        if c0 == 'e' and c1 == 'r' {
             return 29
         }
-        if c0 == 97 and c1 == 110 {
+        if c0 == 'a' and c1 == 'n' {
             return 30
         }
-        if c0 == 114 and c1 == 101 {
+        if c0 == 'r' and c1 == 'e' {
             return 31
         }
         return -1
@@ -48,71 +50,136 @@ mod trie {
 
     fn super_pair_first(tok: I32) I32 {
         if tok == 26 {
-            return 116
-        } // t
+            return 't'
+        }
         if tok == 27 {
-            return 104
-        } // h
+            return 'h'
+        }
         if tok == 28 {
-            return 105
-        } // i
+            return 'i'
+        }
         if tok == 29 {
-            return 101
-        } // e
+            return 'e'
+        }
         if tok == 30 {
-            return 97
-        } // a
-        return 114 // r
+            return 'a'
+        }
+        return 'r'
     }
 
     fn super_pair_second(tok: I32) I32 {
         if tok == 26 {
-            return 104
-        } // h
+            return 'h'
+        }
         if tok == 27 {
-            return 101
-        } // e
+            return 'e'
+        }
         if tok == 28 {
-            return 110
-        } // n
+            return 'n'
+        }
         if tok == 29 {
-            return 114
-        } // r
+            return 'r'
+        }
         if tok == 30 {
-            return 110
-        } // n
-        return 101 // e
+            return 'n'
+        }
+        return 'e'
     }
 
     fn starts_super_pair(ch: I32) Bool {
-        return ch == 116 or ch == 104 or ch == 105 or ch == 101 or ch == 97 or ch == 114
+        return ch == 't' or ch == 'h' or ch == 'i' or ch == 'e' or ch == 'a' or ch == 'r'
     }
 
     // Terminator-only suffix tokens (26..31): ess, ion, ous, ly, ic, al
     fn match_suffix3(c0: I32, c1: I32, c2: I32) I32 {
-        if c0 == 101 and c1 == 115 and c2 == 115 {
+        if c0 == 'e' and c1 == 's' and c2 == 's' {
             return 26
         }
-        if c0 == 105 and c1 == 111 and c2 == 110 {
+        if c0 == 'i' and c1 == 'o' and c2 == 'n' {
             return 27
         }
-        if c0 == 111 and c1 == 117 and c2 == 115 {
+        if c0 == 'o' and c1 == 'u' and c2 == 's' {
             return 28
         }
         return -1
     }
 
     fn match_suffix2(c0: I32, c1: I32) I32 {
-        if c0 == 108 and c1 == 121 {
+        if c0 == 'l' and c1 == 'y' {
             return 29
         }
-        if c0 == 105 and c1 == 99 {
+        if c0 == 'i' and c1 == 'c' {
             return 30
         }
-        if c0 == 97 and c1 == 108 {
+        if c0 == 'a' and c1 == 'l' {
             return 31
         }
         return -1
+    }
+
+    fn read_mem_u32_le(off: I32) I32 {
+        return embedded[off]
+        | (embedded[off + 1] << 8)
+        | (embedded[off + 2] << 16)
+        | (embedded[off + 3] << 24)
+    }
+
+    fn read_mem_mask(off: I32, len: I32) I32 {
+        let v = 0
+        let i = 0
+        while (i < len) {
+            v = v | (embedded[off + i] << (i * 8))
+            i += 1
+        }
+        return v
+    }
+
+    /// Decode the embedded trie_data.bin directly from linear memory.
+    fn load() Trie {
+        let header_size = 208
+        let total_len = embedded.len()
+        let node_count = read_mem_u32_le(0)
+        let checkpoint_count = read_mem_u32_le(4)
+
+        let level_basis: Array[I32] = Array[I32].new(50, 0)
+        for (0 ..< 50) |i| {
+            level_basis[i] = read_mem_u32_le(8 + i * 4)
+        }
+
+        let children_masks: Array[I32] = Array[I32].new(node_count, 0)
+        let terminators_masks: Array[I32] = Array[I32].new(node_count, 0)
+        let checkpoints: Array[I32] = Array[I32].new(checkpoint_count, 0)
+
+        let nodes_end = total_len - checkpoint_count * 4
+        let off = header_size
+        let i = 0
+        while (i < node_count) {
+            let len_byte = embedded[off]
+            off += 1
+            let c_len = (len_byte & 3) + 1
+            let t_len = ((len_byte >>> 2) & 3) + 1
+            children_masks[i] = read_mem_mask(off, c_len)
+            off += c_len
+            terminators_masks[i] = read_mem_mask(off, t_len)
+            off += t_len
+            i += 1
+        }
+
+        let cp_off = nodes_end
+        let c = 0
+        while (c < checkpoint_count) {
+            checkpoints[c] = read_mem_u32_le(cp_off)
+            cp_off += 4
+            c += 1
+        }
+
+        return Trie {
+            children_masks: children_masks,
+            terminators_masks: terminators_masks,
+            checkpoints: checkpoints,
+            level_basis: level_basis,
+            node_count: node_count,
+        }
     }
 
     fn read_u32_le(data: Array[I32], off: I32) I32 {
@@ -222,10 +289,10 @@ mod trie {
         let i = 0
         while (i < n) {
             let c = s[i]
-            if c >= 65 and c <= 90 {
-                out[count] = c + 32
+            if c >= 'A' and c <= 'Z' {
+                out[count] = c + ('a' - 'A')
                 count += 1
-            } else if c >= 97 and c <= 122 {
+            } else if c >= 'a' and c <= 'z' {
                 out[count] = c
                 count += 1
             }
@@ -250,8 +317,8 @@ mod trie {
             }
             if tok < 0 {
                 let c = word[i]
-                if c >= 97 and c <= 122 {
-                    out_buf[out_idx] = c - 97
+                if c >= 'a' and c <= 'z' {
+                    out_buf[out_idx] = c - 'a'
                     out_idx += 1
                 }
                 i += 1
@@ -266,7 +333,7 @@ mod trie {
         while (i < tok_len) {
             let t = tokens[i]
             if t < 26 {
-                out_buf[out_idx] = 97 + t
+                out_buf[out_idx] = 'a' + t
                 out_idx += 1
             } else {
                 out_buf[out_idx] = super_pair_first(t)
@@ -284,58 +351,57 @@ mod trie {
             if out_idx + 1 > cap {
                 return -1
             }
-            out_buf[out_idx] = 97 + tok
+            out_buf[out_idx] = 'a' + tok
             return out_idx + 1
         }
-        if tok == 26 { // ess
+        if tok == 26 {
             if out_idx + 3 > cap {
                 return -1
             }
-            out_buf[out_idx] = 101
-            out_buf[out_idx + 1] = 115
-            out_buf[out_idx + 2] = 115
+            out_buf[out_idx] = 'e'
+            out_buf[out_idx + 1] = 's'
+            out_buf[out_idx + 2] = 's'
             return out_idx + 3
         }
-        if tok == 27 { // ion
+        if tok == 27 {
             if out_idx + 3 > cap {
                 return -1
             }
-            out_buf[out_idx] = 105
-            out_buf[out_idx + 1] = 111
-            out_buf[out_idx + 2] = 110
+            out_buf[out_idx] = 'i'
+            out_buf[out_idx + 1] = 'o'
+            out_buf[out_idx + 2] = 'n'
             return out_idx + 3
         }
-        if tok == 28 { // ous
+        if tok == 28 {
             if out_idx + 3 > cap {
                 return -1
             }
-            out_buf[out_idx] = 111
-            out_buf[out_idx + 1] = 117
-            out_buf[out_idx + 2] = 115
+            out_buf[out_idx] = 'o'
+            out_buf[out_idx + 1] = 'u'
+            out_buf[out_idx + 2] = 's'
             return out_idx + 3
         }
-        if tok == 29 { // ly
+        if tok == 29 {
             if out_idx + 2 > cap {
                 return -1
             }
-            out_buf[out_idx] = 108
-            out_buf[out_idx + 1] = 121
+            out_buf[out_idx] = 'l'
+            out_buf[out_idx + 1] = 'y'
             return out_idx + 2
         }
-        if tok == 30 { // ic
+        if tok == 30 {
             if out_idx + 2 > cap {
                 return -1
             }
-            out_buf[out_idx] = 105
-            out_buf[out_idx + 1] = 99
+            out_buf[out_idx] = 'i'
+            out_buf[out_idx + 1] = 'c'
             return out_idx + 2
         }
-        // 31: al
         if out_idx + 2 > cap {
             return -1
         }
-        out_buf[out_idx] = 97
-        out_buf[out_idx + 1] = 108
+        out_buf[out_idx] = 'a'
+        out_buf[out_idx + 1] = 'l'
         return out_idx + 2
     }
 
@@ -386,7 +452,7 @@ mod trie {
             }
         }
         if term_token < 0 {
-            term_token = word[n - 1] - 97
+            term_token = word[n - 1] - 'a'
         }
 
         let token_buf: Array[I32] = Array[I32].new(128, 0)
@@ -412,11 +478,7 @@ mod trie {
     fn navigate_to_prefix(t: Trie, prefix: Str, token_buf: Array[I32], tok_len: I32) NavResult {
         if tok_len == 0 {
             return NavResult {
-                primary: NavLoc {
-                    node_idx: 0,
-                    level: 0,
-                    tokens_used: 0
-                },
+                primary: NavLoc { node_idx: 0, level: 0, tokens_used: 0 },
                 alt: null,
             }
         }
@@ -430,12 +492,8 @@ mod trie {
             let mask = 1 << tok
 
             if is_last {
-                let alt_loc: ?NavLoc = if tok < 26 and starts_super_pair(97 + tok) {
-                    NavLoc {
-                        node_idx: cur_idx,
-                        level: cur_level,
-                        tokens_used: i
-                    }
+                let alt_loc: ?NavLoc = if tok < 26 and starts_super_pair('a' + tok) {
+                    NavLoc { node_idx: cur_idx, level: cur_level, tokens_used: i }
                 } else {
                     null
                 }
@@ -443,26 +501,16 @@ mod trie {
                 if (t.children_masks[cur_idx] & mask) != 0 {
                     let next_idx = step_child(t, cur_idx, cur_level, tok)
                     return NavResult {
-                        primary: NavLoc {
-                            node_idx: next_idx,
-                            level: cur_level + 1,
-                            tokens_used: i + 1
-                        },
+                        primary: NavLoc { node_idx: next_idx, level: cur_level + 1, tokens_used: i + 1 },
                         alt: alt_loc,
                     }
                 }
 
-                return NavResult {
-                    primary: null,
-                    alt: alt_loc
-                }
+                return NavResult { primary: null, alt: alt_loc }
             }
 
             if (t.children_masks[cur_idx] & mask) == 0 {
-                return NavResult {
-                    primary: null,
-                    alt: null
-                }
+                return NavResult { primary: null, alt: null }
             }
 
             cur_idx = step_child(t, cur_idx, cur_level, tok)
@@ -471,19 +519,15 @@ mod trie {
         }
 
         return NavResult {
-            primary: NavLoc {
-                node_idx: 0,
-                level: 0,
-                tokens_used: 0
-            },
+            primary: NavLoc { node_idx: 0, level: 0, tokens_used: 0 },
             alt: null,
         }
     }
 
     fn child_matches_dangling(dangling_tok: I32, child_tok: I32) Bool {
-        let ch = 97 + dangling_tok
+        let ch = 'a' + dangling_tok
         if child_tok < 26 {
-            return 97 + child_tok == ch
+            return 'a' + child_tok == ch
         }
         return super_pair_first(child_tok) == ch
     }
@@ -623,7 +667,6 @@ mod trie {
             ~> {},
         }
         if results.len() < max_results {
-            // Re-tokenize since primary pass may have mutated token_buf past base_depth
             let re_len = tokenize(prefix, prefix.len(), token_buf)
             promote navs.alt {
                 |nav| => collect_from_nav(t, prefix, nav, true, token_buf, re_len, results, max_results),

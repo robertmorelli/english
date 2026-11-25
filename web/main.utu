@@ -1,38 +1,13 @@
 using Browser from std:Browser
-using Bytes from std:Bytes
 using trie from "../src/trie.utu"
 
 struct State:
-    | data: ?trie.Trie
     | query: Str
     | word_exists: Bool
     | words: Array[Str]
 
-let state: State = State {
-    data: null,
-    query: "",
-    word_exists: false,
-    words: [],
-}
-
-fn load_trie(url: Str, on_loaded: cl() Void) Void {
-    let _p = Browser.fetch(url).then(cl(res) Void {
-        if not res.ok {
-            return
-        }
-        let _p2 = res.arrayBuffer().then(cl(buf) Void {
-            state.data = trie.from_bytes(Bytes.from_js(new Browser.Uint8Array(buf)))
-            on_loaded()
-        })
-    })
-}
-
-fn is_ready() Bool {
-    return promote state.data {
-        |t| => true,
-        ~> false,
-    }
-}
+let dict: trie.Trie = trie.load()
+let state: State = State { query: "", word_exists: false, words: [] }
 
 fn update_results() Void {
     let q = state.query.trim().to_lower()
@@ -41,16 +16,11 @@ fn update_results() Void {
         state.words = []
         return
     }
-    promote state.data {
-        |t| => {
-            state.word_exists = trie.contains(t, q)
-            state.words = trie.autocomplete(t, q, 60)
-        },
-        ~> {},
-    }
+    state.word_exists = trie.contains(dict, q)
+    state.words = trie.autocomplete(dict, q, 60)
 }
 
-wn trie_demo() {
+html {
     @document {
         @supports (width: calc(sibling-index() * 1px)) and (width: calc(sibling-count() * 1px)) {
             body {
@@ -162,9 +132,7 @@ wn trie_demo() {
                 height: 100%
                 overflow: hidden
 
-                * {
-                    display: none
-                }
+                * { display: none }
 
                 &::after {
                     text-align: center
@@ -176,106 +144,58 @@ wn trie_demo() {
         }
     }
 
-    button#download {
-        type = "button"
-        aria-label = "Download"
-        on click {
-            Browser.window.location.href = "./trie_data.bin"
-        }
-        "↓"
-    }
-
-    form#search-box {
-        on submit {
-            update_results()
-        }
-        on reset {
-            state.query = ""
-            state.word_exists = false
-            state.words = []
-        }
-
-        input#search as search_input {
-            type = "text"
-            aria-label = "Search"
-            disabled = not is_ready()
-            bind:value = state.query
-            on mount {
-                load_trie("./trie_data.bin", cl() Void {
-                    wutu.refresh()
-                    wutu.after_render(cl() Void {
-                        search_input.focus()
-                    })
-                })
-            }
-            on input {
-                update_results()
-            }
-        }
-
-        input {
-            type = "reset"
-            value = "x"
-            aria-label = "Clear search"
-        }
-    }
-
-    for state.words |word| key state.query + ":" + word {
-        span {
-            | word
-        }
-    }
-}
-
-html {
     head {
-        meta {
-            charset = "UTF-8"
-        }
-        meta {
-            name = "viewport";
-            content = "width=device-width, initial-scale=1.0"
-        }
-        title {
-            "English Trie"
-        }
-        meta {
-            name = "description";
-            content = "Interactive English word trie visualization"
-        }
-        meta {
-            name = "theme-color";
-            content = "#000000"
-        }
-        meta {
-            name = "twitter:card";
-            content = "summary_large_image"
-        }
-        meta {
-            name = "twitter:title";
-            content = "English Trie"
-        }
-        meta {
-            name = "twitter:description";
-            content = "Interactive English word trie visualization"
-        }
-        meta {
-            name = "twitter:image";
-            content = "https://robertmorelli.github.io/english/preview.png"
-        }
-        link {
-            rel = "icon";
-            href = "./favicon.svg";
-            type = "image/svg+xml"
-        }
+        meta { charset = "UTF-8" }
+        meta { name = "viewport"; content = "width=device-width, initial-scale=1.0" }
+        title { "English Trie" }
+        meta { name = "description"; content = "Interactive English word trie visualization" }
+        meta { name = "theme-color"; content = "#000000" }
+        meta { itemprop = "name"; content = "English Trie" }
+        meta { itemprop = "description"; content = "Interactive English word trie visualization" }
+        meta { itemprop = "image"; content = "https://robertmorelli.github.io/english/preview.png" }
+        meta { property = "og:url"; content = "https://robertmorelli.github.io/english/" }
+        meta { property = "og:type"; content = "website" }
+        meta { property = "og:title"; content = "English Trie" }
+        meta { property = "og:description"; content = "Interactive English word trie visualization" }
+        meta { property = "og:image"; content = "https://robertmorelli.github.io/english/preview.png" }
+        meta { name = "twitter:card"; content = "summary_large_image" }
+        meta { name = "twitter:title"; content = "English Trie" }
+        meta { name = "twitter:description"; content = "Interactive English word trie visualization" }
+        meta { name = "twitter:image"; content = "https://robertmorelli.github.io/english/preview.png" }
+        link { rel = "icon"; href = "./favicon.svg"; type = "image/svg+xml" }
     }
 
     body {
-        class = if state.word_exists {
-            "word-exists"
-        } else {
-            ""
+        class = if state.word_exists { "word-exists" } else { "" }
+
+        button#download {
+            type = "button"
+            aria-label = "Download"
+            on click { Browser.window.location.href = "./app.wasm" }
+            "↓"
         }
-        |> trie_demo()
+
+        form#search-box {
+            on submit { update_results() }
+            on reset {
+                state.query = ""
+                state.word_exists = false
+                state.words = []
+            }
+
+            input#search as search_input {
+                type = "text"
+                aria-label = "Search"
+                bind:value = state.query
+                on mount { search_input.focus() }
+                on input { update_results() }
+            }
+
+            input { type = "reset"; value = "x"; aria-label = "Clear search" }
+        }
+
+        for state.words |word| key state.query + ":" + word {
+            span { | word }
+        }
     }
 }
