@@ -1,49 +1,35 @@
 using Buffer from std:Buffer
 using console from std:Console
+using Fs from "node:fs"
+using JS from std:JS
 
 // Builds the packed level-order English dictionary trie from /usr/share/dict/words.
 // Run with: utu src/build_trie.utu
 
-let read_text_file: fun(Str) Str = @es/\
-    (path) => {
-        const fs = require("node:fs");
-        return fs.readFileSync(path, "utf8");
-    }
-\/
+struct ByteWriter:
+    | buf: JS.Uint8Array
+    | pos: I32
 
-let write_bytes_begin: fun(I32) Void = @es/\
-    (size) => {
-        globalThis.__outBuf = new Uint8Array(size);
-        globalThis.__outPos = 0;
+fn new_writer(size: I32) ByteWriter {
+    return ByteWriter {
+        buf: new JS.Uint8Array(size.f64()),
+        pos: 0,
     }
-\/
+}
 
-let write_u8: fun(I32) Void = @es/\
-    (b) => {
-        globalThis.__outBuf[globalThis.__outPos++] = b & 0xff;
-    }
-\/
+fn write_u8(w: ByteWriter, b: I32) Void {
+    w.buf[w.pos.f64()] = (b & 255).f64()
+    w.pos += 1
+}
 
-let write_u32_le: fun(I32) Void = @es/\
-    (v) => {
-        const buf = globalThis.__outBuf;
-        let p = globalThis.__outPos;
-        buf[p] = v & 0xff;
-        buf[p + 1] = (v >>> 8) & 0xff;
-        buf[p + 2] = (v >>> 16) & 0xff;
-        buf[p + 3] = (v >>> 24) & 0xff;
-        globalThis.__outPos = p + 4;
-    }
-\/
-
-let write_bytes_save: fun(Str) I32 = @es/\
-    (path) => {
-        const fs = require("node:fs");
-        const slice = globalThis.__outBuf.subarray(0, globalThis.__outPos);
-        fs.writeFileSync(path, slice);
-        return slice.length;
-    }
-\/
+fn write_u32_le(w: ByteWriter, v: I32) Void {
+    let p = w.pos
+    w.buf[p.f64()] = (v & 255).f64()
+    w.buf[(p + 1).f64()] = ((v >>> 8) & 255).f64()
+    w.buf[(p + 2).f64()] = ((v >>> 16) & 255).f64()
+    w.buf[(p + 3).f64()] = ((v >>> 24) & 255).f64()
+    w.pos = p + 4
+}
 
 struct BuildNode:
     | children_mask: I32
@@ -219,7 +205,7 @@ main {
     let output_file = "docs/trie_data.bin"
 
     console.log("Reading words from " + words_file + "...")
-    let text = read_text_file(words_file)
+    let text = Fs.readFileSync(words_file, "utf8")
     let len = text.len()
 
     let root = new_node()
@@ -287,13 +273,13 @@ main {
 
     // Exact upper bound: 208 header + 9 bytes/node max + 4 bytes/checkpoint
     let max_bytes = 208 + node_count * 9 + checkpoint_count * 4
-    write_bytes_begin(max_bytes)
+    let w = new_writer(max_bytes)
 
     // Header
-    write_u32_le(node_count)
-    write_u32_le(checkpoint_count)
+    write_u32_le(w, node_count)
+    write_u32_le(w, checkpoint_count)
     for (0 ..< 50) |i| {
-        write_u32_le(level_basis[i])
+        write_u32_le(w, level_basis[i])
     }
 
     // Packed nodes
@@ -305,16 +291,16 @@ main {
         let c_len = mask_byte_len(c_mask)
         let t_len = mask_byte_len(t_mask)
         let length_byte = ((t_len - 1) << 2) | (c_len - 1)
-        write_u8(length_byte)
+        write_u8(w, length_byte)
 
         let b = 0
         while (b < c_len) {
-            write_u8((c_mask >>> (b * 8)) & 255)
+            write_u8(w, (c_mask >>> (b * 8)) & 255)
             b += 1
         }
         b = 0
         while (b < t_len) {
-            write_u8((t_mask >>> (b * 8)) & 255)
+            write_u8(w, (t_mask >>> (b * 8)) & 255)
             b += 1
         }
         i += 1
@@ -325,12 +311,13 @@ main {
     i = 0
     while (i < node_count) {
         if (i & 31) == 0 {
-            write_u32_le(running)
+            write_u32_le(w, running)
         }
         running += I32.popcnt(all_nodes[i].children_mask)
         i += 1
     }
 
-    let written = write_bytes_save(output_file)
-    console.log("Wrote " + written.str() + " bytes to " + output_file)
+    let out = w.buf.subarray(0.0, w.pos.f64())
+    Fs.writeFileSync(output_file, out)
+    console.log("Wrote " + w.pos.str() + " bytes to " + output_file)
 }

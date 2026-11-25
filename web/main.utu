@@ -14,35 +14,23 @@ let state: State = State {
     words: [],
 }
 
-let fetch_bytes: fun(Str, cl(I32) Void) Void = @es/\
-    (url, onReady) => {
-        fetch(url)
-            .then((r) => {
-                if (!r.ok) throw new Error("fetch failed");
-                return r.arrayBuffer();
-            })
-            .then((buf) => {
-                globalThis.__trieBytes = new Uint8Array(buf);
-                onReady(globalThis.__trieBytes.length);
-            })
-            .catch(() => {});
-    }
-\/
-
-let fetched_byte: fun(I32) I32 = @es/\
-    (i) => globalThis.__trieBytes[i]
-\/
-
 fn load_trie(url: Str, on_loaded: cl() Void) Void {
-    fetch_bytes(url, cl(n: I32) Void {
-        let bytes: Array[I32] = Array[I32].new(n, 0)
-        let i = 0
-        while (i < n) {
-            bytes[i] = fetched_byte(i)
-            i += 1
+    let _p = Browser.fetch(url).then(cl(res) Void {
+        if not res.ok {
+            return
         }
-        state.data = trie.from_bytes(bytes)
-        on_loaded()
+        let _p2 = res.arrayBuffer().then(cl(buf) Void {
+            let u8 = new Browser.Uint8Array(buf)
+            let n = u8.length.i32()
+            let bytes: Array[I32] = Array[I32].new(n, 0)
+            let i = 0
+            while (i < n) {
+                bytes[i] = u8[i.f64()].i32()
+                i += 1
+            }
+            state.data = trie.from_bytes(bytes)
+            on_loaded()
+        })
     })
 }
 
