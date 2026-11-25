@@ -17,6 +17,7 @@ The serialization format:
     - u32: cumulative popcount
 """
 
+import os
 import struct
 import sys
 from typing import List, Tuple
@@ -194,7 +195,7 @@ class TrieBuilder:
 
 def main():
     words_file = "/usr/share/dict/words"
-    output_file = "trie_data.bin"
+    output_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trie_data.bin")
 
     print(f"Reading words from {words_file}...")
 

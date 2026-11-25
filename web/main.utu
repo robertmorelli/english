@@ -1,0 +1,327 @@
+using Browser from std:Browser
+
+struct State:
+    | ready: Bool
+    | query: Str
+    | word_exists: Bool
+    | words: Array[Str]
+
+let state: State = State {
+    ready: false,
+    query: "",
+    word_exists: false,
+    words: [],
+}
+
+mod trie {
+    let init_wasm: fun(Str, cl() Void) Void = @es/\
+        (wasmPath, onReady) => {
+            fetch(wasmPath)
+                .then((r) => {
+                    if (!r.ok) throw new Error("fetch failed");
+                    return r.arrayBuffer();
+                })
+                .then((bytes) => WebAssembly.instantiate(bytes, { env: {} }))
+                .then((res) => {
+                    const wasm = res.instance.exports;
+                    wasm.init();
+                    globalThis.__englishTrie = {
+                        wasm,
+                        encoder: new TextEncoder(),
+                        decoder: new TextDecoder(),
+                    };
+                    onReady();
+                })
+                .catch(() => {});
+        }
+    \/
+
+    let contains_raw: fun(Str) Bool = @es/\
+        (word) => {
+            const t = globalThis.__englishTrie;
+            if (!t) return false;
+            const normalized = word.trim().toLowerCase().replace(/[^a-z]/g, "");
+            if (!normalized) return false;
+            const bytes = t.encoder.encode(normalized);
+            const ptr = t.wasm.getResultBuffer();
+            new Uint8Array(t.wasm.memory.buffer).set(bytes, ptr);
+            return Boolean(t.wasm.contains(ptr, bytes.length));
+        }
+    \/
+
+    let autocomplete_raw: fun(Str, I32) Str = @es/\
+        (prefix, maxResults) => {
+            const t = globalThis.__englishTrie;
+            if (!t) return "";
+            const normalized = prefix.trim().toLowerCase().replace(/[^a-z]/g, "");
+            if (!normalized) return "";
+            const bytes = t.encoder.encode(normalized);
+            const ptr = t.wasm.getResultPtr();
+            new Uint8Array(t.wasm.memory.buffer).set(bytes, ptr);
+            const len = t.wasm.autocomplete(ptr, bytes.length, maxResults);
+            if (len <= 0) return "";
+            const out = new Uint8Array(t.wasm.memory.buffer, ptr, len);
+            return t.decoder.decode(out).trim();
+        }
+    \/
+
+    fn load(wasm_path: Str, on_ready: cl() Void) Void {
+        init_wasm(wasm_path, on_ready)
+    }
+
+    fn is_word(word: Str) Bool {
+        return contains_raw(word)
+    }
+
+    fn completions(prefix: Str, max_results: I32) Array[Str] {
+        let raw = autocomplete_raw(prefix, max_results)
+        if raw.len() == 0 {
+            return []
+        }
+        return raw.split("\n")
+    }
+}
+
+fn update_results() Void {
+    let q = state.query.trim().toLowerCase()
+    if q.len() == 0 {
+        state.word_exists = false
+        state.words = []
+        return
+    }
+    state.word_exists = trie.is_word(q)
+    state.words = trie.completions(q, 1000)
+}
+
+wn trie_demo() {
+    @document {
+        @supports (width: calc(sibling-index() * 1px)) and (width: calc(sibling-count() * 1px)) {
+            body {
+                display: grid
+                width: 100%
+                height: 100vh
+                margin: 0
+                align-items: center
+                justify-items: center
+                --input-accent: none
+                --input-font-weight: normal
+                overflow: hidden
+
+                * {
+                    box-sizing: border-box
+                    overflow: hidden
+                    font-family: Monaco,
+                    monospace
+                }
+
+                &.word-exists {
+                    --input-accent: underline
+                    --input-font-weight: bolder
+                }
+
+                #download {
+                    grid-row: 1
+                    grid-column: 1
+                    width: 2rem
+                    height: 2rem
+                    background: black
+                    align-self: baseline
+                    justify-self: baseline
+                    color: white
+                }
+
+                #search-box {
+                    grid-row: 1
+                    grid-column: 1
+                    anchor-name: --hub
+                    display: grid
+
+                    > input {
+                        grid-row: 1
+                        grid-column: 1
+                        padding: 1rem
+
+                        &[type="reset"] {
+                            width: 2rem
+                            height: 2rem
+                            margin-right: 1rem
+                            background: white
+                            justify-self: right
+                            align-self: center
+                            color: black
+                            text-align: center
+                            padding: 0 0
+                        }
+
+                        &[type="text"] {
+                            anchor-name: --search
+                            font-size: 2rem
+                            width: 20rem
+                            background: black
+                            color: white
+                            text-decoration: var(--input-accent)
+                            font-weight: var(--input-font-weight)
+                        }
+                    }
+                }
+
+                form ~ span {
+                    position: fixed
+                    position-anchor: --hub
+                    top: anchor(center)
+                    left: anchor(center)
+                    white-space: nowrap
+                    font-weight: 600
+                    --i: sibling-index()
+                    --n: sibling-count()
+                    --angle: calc(var(--i) * 137.5deg)
+                    --r: calc(2rem + calc(sqrt(var(--i)) * 6rem))
+                    transform: translate(calc(cos(var(--angle)) * var(--r) - 50%), calc(sin(var(--angle)) * var(--r) - 50%))
+                    --wave: calc(sin(var(--i) * 83deg) * 0.5 + 0.5)
+                    font-size: calc(0.8rem + var(--wave) * 0.6rem)
+                    padding: 0.2em 0.6em
+                    --box-color: oklch(0.65 0.2 calc(var(--i) / var(--n) * 360))
+                    color: var(--box-color)
+                    background: transparent
+                    animation: fade 600ms ease forwards calc(250ms + var(--i) * 10ms)
+                }
+            }
+
+            @keyframes fade {
+                to {
+                    color: white
+                    background: var(--box-color)
+                }
+            }
+        }
+
+        @supports not ((width: calc(sibling-index() * 1px)) and (width: calc(sibling-count() * 1px))) {
+            body {
+                background: black
+                color: white
+                font-size: 2rem
+                font-family: monospace
+                font-weight: bolder
+                text-decoration: underline
+                display: grid
+                height: 100%
+                overflow: hidden
+
+                * {
+                    display: none
+                }
+
+                &::after {
+                    text-align: center
+                    align-self: center
+                    text-wrap: balance
+                    content: "Use a real browser instead of a broken toy"
+                }
+            }
+        }
+    }
+
+    button#download {
+        type = "button"
+        aria-label = "Download"
+        on click {
+            Browser.window.location.href = "./english.zip"
+        }
+        "↓"
+    }
+
+    form#search-box {
+        on submit {
+            update_results()
+        }
+        on reset {
+            state.query = ""
+            state.word_exists = false
+            state.words = []
+        }
+
+        input#search as search_input {
+            type = "text"
+            aria-label = "Search"
+            disabled = not state.ready
+            bind:value = state.query
+            on mount {
+                trie.load("./english.wasm", cl() Void {
+                    state.ready = true
+                    wutu.refresh()
+                    wutu.after_render(cl() Void {
+                        search_input.focus()
+                    })
+                })
+            }
+            on input {
+                update_results()
+            }
+        }
+
+        input {
+            type = "reset"
+            value = "x"
+            aria-label = "Clear search"
+        }
+    }
+
+    for state.words |word| {
+        span {
+            | word
+        }
+    }
+}
+
+html {
+    head {
+        meta {
+            charset = "UTF-8"
+        }
+        meta {
+            name = "viewport";
+            content = "width=device-width, initial-scale=1.0"
+        }
+        title {
+            "English Trie"
+        }
+        meta {
+            name = "description";
+            content = "Interactive English word trie visualization"
+        }
+        meta {
+            name = "theme-color";
+            content = "#000000"
+        }
+        meta {
+            name = "twitter:card";
+            content = "summary_large_image"
+        }
+        meta {
+            name = "twitter:title";
+            content = "English Trie"
+        }
+        meta {
+            name = "twitter:description";
+            content = "Interactive English word trie visualization"
+        }
+        meta {
+            name = "twitter:image";
+            content = "https://robertmorelli.github.io/english/preview.png"
+        }
+        link {
+            rel = "icon";
+            href = "./favicon.svg";
+            type = "image/svg+xml"
+        }
+    }
+
+    body {
+        class = if state.word_exists {
+            "word-exists"
+        } else {
+            ""
+        }
+        |> trie_demo()
+    }
+}

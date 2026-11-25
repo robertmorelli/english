@@ -1,44 +1,126 @@
-<!DOCTYPE html>
-<html lang="en" itemscope itemtype="https://schema.org/WebSite">
-	<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<title>English Trie</title>
-		<meta name="description" content="Interactive English word trie visualization">
-		<meta name="theme-color" content="#000000">
-		<!-- og -->
+<!doctype html><html data-wutu="vjv0fds:0" data-wutu-root="vjv0fds:0"><head data-wutu="vjv0fds:1"><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>English Trie</title><meta name="description" content="Interactive English word trie visualization"><meta name="theme-color" content="#000000"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="English Trie"><meta name="twitter:description" content="Interactive English word trie visualization"><meta name="twitter:image" content="https://robertmorelli.github.io/english/preview.png"><link rel="icon" href="./favicon.svg" type="image/svg+xml"><style id="wutu-cozim8" data-wutu-style="">@layer wutu.document{
+        @supports (width: calc(sibling-index() * 1px)) and (width: calc(sibling-count() * 1px)) {
+            body {
+                display: grid;
+                width: 100%;
+                height: 100vh;
+                margin: 0;
+                align-items: center;
+                justify-items: center;
+                --input-accent: none;
+                --input-font-weight: normal;
+                overflow: hidden;
 
-		<!-- Google / Search Engine Tags -->
-		<meta itemprop="name" content="English Trie">
-		<meta itemprop="description" content="Interactive English word trie visualization">
-		<meta itemprop="image" content="https://robertmorelli.github.io/english/preview.png">
+                * {
+                    box-sizing: border-box;
+                    overflow: hidden;
+                    font-family: Monaco,
+                    monospace;
+                }
 
-		<!-- Facebook Meta Tags -->
-		<meta property="og:url" content="https://robertmorelli.github.io/english/">
-		<meta property="og:type" content="website">
-		<meta property="og:title" content="English Trie">
-		<meta property="og:description" content="Interactive English word trie visualization">
-		<meta property="og:image" content="https://robertmorelli.github.io/english/preview.png">
+                &.word-exists {
+                    --input-accent: underline;
+                    --input-font-weight: bolder;
+                }
 
-		<!-- Twitter Meta Tags -->
-		<meta name="twitter:card" content="summary_large_image">
-		<meta property="twitter:domain" content="robertmorelli.github.io">
-		<meta property="twitter:url" content="https://robertmorelli.github.io/english/">
-		<meta name="twitter:title" content="English Trie">
-		<meta name="twitter:description" content="Interactive English word trie visualization">
-		<meta name="twitter:image" content="https://robertmorelli.github.io/english/preview.png">
+                #download {
+                    grid-row: 1;
+                    grid-column: 1;
+                    width: 2rem;
+                    height: 2rem;
+                    background: black;
+                    align-self: baseline;
+                    justify-self: baseline;
+                    color: white;
+                }
 
-		<!-- resources -->
-		<link rel="icon" href="./favicon.svg" type="image/svg+xml">
-		<link href="./style.css" rel="stylesheet">
-		<script src="./script.js" type="module"></script>
-	</head>
+                #search-box {
+                    grid-row: 1;
+                    grid-column: 1;
+                    anchor-name: --hub;
+                    display: grid;
 
-	<body>
-		<button id="download" type="button" aria-label="Download">↓</button>
-		<form id="search-box">
-			<input id="search" type="text" disabled aria-label="Search">
-			<input type="reset" value="x" aria-label="Clear search">
-		</form>
-	</body>
-</html>
+                    > input {
+                        grid-row: 1;
+                        grid-column: 1;
+                        padding: 1rem;
+
+                        &[type="reset"] {
+                            width: 2rem;
+                            height: 2rem;
+                            margin-right: 1rem;
+                            background: white;
+                            justify-self: right;
+                            align-self: center;
+                            color: black;
+                            text-align: center;
+                            padding: 0 0;
+                        }
+
+                        &[type="text"] {
+                            anchor-name: --search;
+                            font-size: 2rem;
+                            width: 20rem;
+                            background: black;
+                            color: white;
+                            text-decoration: var(--input-accent);
+                            font-weight: var(--input-font-weight);
+                        }
+                    }
+                }
+
+                form ~ span {
+                    position: fixed;
+                    position-anchor: --hub;
+                    top: anchor(center);
+                    left: anchor(center);
+                    white-space: nowrap;
+                    font-weight: 600;
+                    --i: sibling-index();
+                    --n: sibling-count();
+                    --angle: calc(var(--i) * 137.5deg);
+                    --r: calc(2rem + calc(sqrt(var(--i)) * 6rem));
+                    transform: translate(calc(cos(var(--angle)) * var(--r) - 50%), calc(sin(var(--angle)) * var(--r) - 50%));
+                    --wave: calc(sin(var(--i) * 83deg) * 0.5 + 0.5);
+                    font-size: calc(0.8rem + var(--wave) * 0.6rem);
+                    padding: 0.2em 0.6em;
+                    --box-color: oklch(0.65 0.2 calc(var(--i) / var(--n) * 360));
+                    color: var(--box-color);
+                    background: transparent;
+                    animation: fade 600ms ease forwards calc(250ms + var(--i) * 10ms);
+                }
+            }
+
+            @keyframes fade {
+                to {
+                    color: white;
+                    background: var(--box-color);
+                }
+            }
+        }
+
+        @supports not ((width: calc(sibling-index() * 1px)) and (width: calc(sibling-count() * 1px))) {
+            body {
+                background: black;
+                color: white;
+                font-size: 2rem;
+                font-family: monospace;
+                font-weight: bolder;
+                text-decoration: underline;
+                display: grid;
+                height: 100%;
+                overflow: hidden;
+
+                * {
+                    display: none;
+                }
+
+                &::after {
+                    text-align: center;
+                    align-self: center;
+                    text-wrap: balance;
+                    content: "Use a real browser instead of a broken toy";
+                }
+            }
+        }
+    }</style></head><body data-wutu="vjv0fds:12" class=""><!--wutu:1yfprsj:c16%3Acall%3Ajv0fds%3A1194--><button id="download" type="button" aria-label="Download" data-wutu="v1yfprsj:0:c16:call:jv0fds:1194" data-utu-static="" disabled="" data-wutu-pending="">↓</button><form id="search-box" data-wutu="v1yfprsj:1:c16:call:jv0fds:1194" data-utu-static=""><input id="search" type="text" aria-label="Search" data-wutu="v1yfprsj:2:c16:call:jv0fds:1194" disabled="" value=""><input type="reset" value="x" aria-label="Clear search" data-wutu="v1yfprsj:3:c16:call:jv0fds:1194" disabled="" data-wutu-pending=""></form><!--/wutu:1yfprsj:c16%3Acall%3Ajv0fds%3A1194--><script type="module" src="./app.js"></script></body></html>

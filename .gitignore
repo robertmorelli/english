@@ -1,3 +1,4 @@
-autocomplete
-docs/autocomplete_wasm.wasm
 .DS_Store
+.mypy_cache/
+.claude/
+.vscode/
